@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#667eea">
     <title>AI 人物工坊 · Character Studio</title>
-    <link rel="stylesheet" href="css/style.css?v=8">
+    <link rel="stylesheet" href="css/style.css?v=9">
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
 </head>
 <body>
@@ -66,6 +66,7 @@
                                 <div class="mini-status" id="miniStatus">请先去「设定」创建人物</div>
                             </div>
                         </div>
+                        <button class="rating-chip" id="ratingChip" title="切换内容分级" style="display:none;">G ▾</button>
                         <button class="btn-icon" id="clearChatBtn" title="清空当前对话">🗑️</button>
                     </div>
 
@@ -223,6 +224,8 @@
                         <option value="r14">R14 · 轻度暧昧</option>
                         <option value="r16">R16 · 亲密情感</option>
                         <option value="r18">R18 · 成人向</option>
+                        <option value="r20">R20 · 成人进阶</option>
+                        <option value="r23">R23 · 完全成人</option>
                     </select>
                     <span class="hint">控制 AI 回复的内容尺度。若角色年龄段为孩童或少年，将自动按全年龄输出。</span>
                 </div>
@@ -330,9 +333,23 @@
         </div>
     </div>
 
+    <!-- 内容分级选择（聊天页快速切换） -->
+    <div class="rating-picker" id="ratingPicker">
+        <div class="rating-picker-inner">
+            <div class="rating-picker-head">
+                <span>选择内容分级</span>
+                <button class="btn-icon" id="closeRatingPicker">✕</button>
+            </div>
+            <div class="rating-options" id="ratingOptions"></div>
+            <div class="rating-picker-note" id="ratingPickerNote" style="display:none;">
+                该角色的年龄段为未成年，已强制限制为「全年龄」，无法调高分级。
+            </div>
+        </div>
+    </div>
+
     <!-- Toast 提示 -->
     <div class="toast" id="toast"></div>
 
-    <script src="js/app.js?v=8"></script>
+    <script src="js/app.js?v=9"></script>
 </body>
 </html>

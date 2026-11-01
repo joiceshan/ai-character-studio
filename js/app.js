@@ -27,22 +27,38 @@ const RATING_MAP = {
     all: {
         label: '全年龄',
         badge: 'G',
+        short: '健康向，不含成人内容',
         prompt: '内容健康向，适合所有年龄。不涉及性、血腥、暴力等成人话题，以日常、友情、亲情、成长为主。'
     },
     r14: {
         label: 'R14',
         badge: 'R14',
+        short: '轻度暧昧与含蓄暗示',
         prompt: '轻度情感向（14+）。允许轻度暧昧、心跳加速的心理描写、含蓄的情感暗示和适度玩笑。禁止露骨性描写、性行为细节、血腥暴力细节。'
     },
     r16: {
         label: 'R16',
         badge: 'R16',
+        short: '亲密接触与浪漫氛围',
         prompt: '青涩亲密向（16+）。允许接吻、拥抱等亲密肢体接触的描写，以及较直接的情感与欲望暗示。可以营造浪漫暧昧氛围，但不做露骨细节刻画。'
     },
     r18: {
         label: 'R18',
         badge: 'R18',
+        short: '成熟直白的情感表达',
         prompt: '成人向（18+）。允许成熟、直白的情感表达与亲密氛围描写，语气可以更大胆暧昧。但仍需保持文学性，避免堆砌露骨的性行为细节。'
+    },
+    r20: {
+        label: 'R20',
+        badge: 'R20',
+        short: '更直接的成人氛围',
+        prompt: '成熟进阶向（20+）。允许更直接的成人情感与情欲氛围描写，可以较为坦率地表达欲望与亲密互动。仍需保留叙事与情感铺垫，避免纯生理描写堆砌。'
+    },
+    r23: {
+        label: 'R23',
+        badge: 'R23',
+        short: '最开放的成熟分级',
+        prompt: '完全成人向（23+）。在合法合规前提下，允许最开放的成熟主题、明确的情欲表达与直白的亲密描写，语气与场景可以更深入。仍需保持角色一致性与基本文学性。'
     }
 };
 
@@ -234,10 +250,21 @@ function updateCharacterPreview() {
         const parts = [c.identity, ageLabel].filter(Boolean);
         miniStatus.textContent = parts.join(' · ') || '已就绪，开始对话吧';
         miniStatus.textContent += `  ·  ${rating.label}`;
+
+        // 聊天页分级快捷按钮
+        const chip = document.getElementById('ratingChip');
+        if (chip) {
+            chip.style.display = 'inline-block';
+            chip.textContent = `${rating.badge} ▾`;
+            const restricted = c.ageGroup === 'child' || c.ageGroup === 'teen';
+            chip.classList.toggle('restricted', restricted);
+        }
     } else {
         miniAvatar.textContent = '🤖';
         miniName.textContent = '未选择角色';
         miniStatus.textContent = '点击左侧列表选择一个角色';
+        const chip = document.getElementById('ratingChip');
+        if (chip) chip.style.display = 'none';
     }
 
     // 快捷提示
@@ -836,6 +863,58 @@ function closeSidebar() {
     document.getElementById('sidebarOverlay')?.classList.remove('show');
 }
 
+// ---------- 聊天页内容分级切换 ----------
+function openRatingPicker() {
+    const c = getActiveChar();
+    if (!c) {
+        showToast('请先选择一个角色', 'error');
+        return;
+    }
+
+    const restricted = c.ageGroup === 'child' || c.ageGroup === 'teen';
+    const current = c.rating || 'all';
+    const optionsEl = document.getElementById('ratingOptions');
+
+    optionsEl.innerHTML = Object.entries(RATING_MAP).map(([key, r]) => {
+        const disabled = restricted && key !== 'all';
+        return `
+            <button class="rating-option${key === current ? ' selected' : ''}${disabled ? ' disabled' : ''}" data-key="${key}">
+                <span class="rating-badge">${r.badge}</span>
+                <span class="rating-text">
+                    <span class="rating-label">${r.label}</span>
+                    <span class="rating-short">${r.short}</span>
+                </span>
+                ${key === current ? '<span class="rating-check">✓</span>' : ''}
+            </button>`;
+    }).join('');
+
+    document.getElementById('ratingPickerNote').style.display = restricted ? 'block' : 'none';
+
+    optionsEl.querySelectorAll('.rating-option').forEach(btn => {
+        btn.addEventListener('click', () => {
+            if (btn.classList.contains('disabled')) {
+                showToast('该角色年龄段为未成年，已强制限制为全年龄', 'error');
+                return;
+            }
+            const key = btn.dataset.key;
+            const idx = State.characters.findIndex(x => x.id === State.activeCharacterId);
+            if (idx >= 0) {
+                State.characters[idx].rating = key;
+                saveToStorage();
+                updateUI();
+            }
+            closeRatingPicker();
+            showToast(`已切换为 ${RATING_MAP[key].label}`, 'success');
+        });
+    });
+
+    document.getElementById('ratingPicker').classList.add('show');
+}
+
+function closeRatingPicker() {
+    document.getElementById('ratingPicker').classList.remove('show');
+}
+
 function initChat() {
     const input = document.getElementById('chatInput');
     const sendBtn = document.getElementById('sendBtn');
@@ -857,6 +936,13 @@ function initChat() {
     // 从对话页快速新建角色
     document.getElementById('newCharacterFromChat')?.addEventListener('click', () => {
         createNewCharacterAndEdit();
+    });
+
+    // 内容分级快捷切换
+    document.getElementById('ratingChip')?.addEventListener('click', openRatingPicker);
+    document.getElementById('closeRatingPicker')?.addEventListener('click', closeRatingPicker);
+    document.getElementById('ratingPicker')?.addEventListener('click', (e) => {
+        if (e.target.id === 'ratingPicker') closeRatingPicker();
     });
 
     // 输入自适应高度

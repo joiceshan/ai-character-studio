@@ -264,7 +264,7 @@ function renderCharSidebar() {
             saveToStorage();
             updateUI();
             // 移动端收起侧边栏
-            document.getElementById('chatSidebar')?.classList.remove('open');
+            closeSidebar();
         });
 
         list.appendChild(li);
@@ -763,24 +763,30 @@ ${c.background ? `【背景故事】：${c.background}` : ''}
 }
 
 // ---------- 对话功能 ----------
+// 关闭移动端角色侧边栏
+function closeSidebar() {
+    document.getElementById('chatSidebar')?.classList.remove('open');
+    document.getElementById('sidebarOverlay')?.classList.remove('show');
+}
+
 function initChat() {
     const input = document.getElementById('chatInput');
     const sendBtn = document.getElementById('sendBtn');
 
     // 侧边栏切换（移动端）
     const sidebar = document.getElementById('chatSidebar');
-    const layout = document.querySelector('.chat-layout');
+    const overlay = document.getElementById('sidebarOverlay');
     document.getElementById('sidebarToggle')?.addEventListener('click', () => {
-        sidebar?.classList.toggle('open');
-        layout?.classList.toggle('overlay-on');
+        const opening = !sidebar.classList.contains('open');
+        sidebar.classList.toggle('open', opening);
+        overlay.classList.toggle('show', opening);
     });
-    // 点遮罩或选角色后收起
-    const closeSidebar = () => {
-        sidebar?.classList.remove('open');
-        layout?.classList.remove('overlay-on');
-    };
+    // 点遮罩关闭侧边栏
+    overlay?.addEventListener('click', closeSidebar);
+    // 侧边栏头部关闭按钮
+    document.getElementById('closeSidebarBtn')?.addEventListener('click', closeSidebar);
+    // 点主对话区关闭
     document.getElementById('chatMessages')?.addEventListener('click', closeSidebar);
-    document.getElementById('quickPrompts')?.addEventListener('click', closeSidebar);
     // 从对话页快速新建角色
     document.getElementById('newCharacterFromChat')?.addEventListener('click', () => {
         createNewCharacterAndEdit();

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#667eea">
     <title>AI 人物工坊 · Character Studio</title>
-    <link rel="stylesheet" href="css/style.css?v=5">
+    <link rel="stylesheet" href="css/style.css?v=6">
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
 </head>
 <body>
@@ -45,7 +45,10 @@
                 <aside class="chat-sidebar" id="chatSidebar">
                     <div class="sidebar-header">
                         <span class="sidebar-title">我的角色</span>
-                        <button class="btn-icon" id="newCharacterFromChat" title="新建角色">➕</button>
+                        <div class="sidebar-actions">
+                            <button class="btn-icon" id="newCharacterFromChat" title="新建角色">➕</button>
+                            <button class="btn-icon sidebar-close-btn" id="closeSidebarBtn" title="收起列表">✕</button>
+                        </div>
                     </div>
                     <div class="char-list" id="charList">
                         <!-- JS 渲染 -->
@@ -93,6 +96,9 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- 移动端侧边栏遮罩 -->
+                <div class="sidebar-overlay" id="sidebarOverlay"></div>
             </div>
         </section>
 
@@ -316,6 +322,6 @@
     <!-- Toast 提示 -->
     <div class="toast" id="toast"></div>
 
-    <script src="js/app.js?v=5"></script>
+    <script src="js/app.js?v=6"></script>
 </body>
 </html>

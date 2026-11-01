@@ -323,10 +323,12 @@ function initSettingsForm() {
             const result = await rawTestConnection();
             showApiStatus('success', '✅ 连接成功！AI 回复:「' + result + '」');
             showToast('连接成功', 'success');
+            console.log('[API测试] 成功:', result);
         } catch (err) {
-            const detail = err.stack ? err.stack.split('\n')[0] : err.message;
-            showApiStatus('error', '❌ 连接失败\n' + detail);
-            showToast('连接失败', 'error');
+            console.error('[API测试] 失败:', err);
+            const detail = err.message || String(err);
+            showApiStatus('error', '❌ ' + detail);
+            showToast('❌ ' + detail.substring(0, 50), 'error');
         } finally {
             hideLoading();
         }

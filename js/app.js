@@ -139,15 +139,15 @@ function updateUI() {
 }
 
 function updateCharacterPreview() {
-    const preview = document.getElementById('chatCharacterPreview');
     const miniAvatar = document.getElementById('miniAvatar');
     const miniName = document.getElementById('miniName');
     const miniStatus = document.getElementById('miniStatus');
 
     if (State.character && State.character.name) {
-        miniAvatar.textContent = State.character.avatar || '🤖';
+        renderCharacterAvatar(miniAvatar, State.character);
         miniName.textContent = State.character.name;
-        miniStatus.textContent = State.character.identity || '已就绪，开始对话吧';
+        const ageLabel = AGE_LABEL_MAP[State.character.ageGroup] || '';
+        miniStatus.textContent = [State.character.identity, ageLabel].filter(Boolean).join(' · ') || '已就绪，开始对话吧';
     } else {
         miniAvatar.textContent = '🤖';
         miniName.textContent = '未设定角色';
@@ -163,6 +163,11 @@ function updateCharacterPreview() {
     }
 }
 
+const AGE_LABEL_MAP = {
+    child: '孩童', teen: '少年', young: '青年',
+    adult: '壮年', middle: '中年', senior: '老年'
+};
+
 // ---------- 头像网格 ----------
 function initAvatarGrid() {
     const grid = document.getElementById('avatarGrid');
@@ -172,13 +177,90 @@ function initAvatarGrid() {
     
     grid.querySelectorAll('.avatar-option').forEach(btn => {
         btn.addEventListener('click', () => {
-            const avatar = btn.dataset.avatar;
-            document.querySelectorAll('.avatar-option').forEach(b => b.classList.remove('selected'));
+            clearAvatarSelection();
             btn.classList.add('selected');
-            document.getElementById('avatarPreview').textContent = avatar;
-            if (State.character) State.character.avatar = avatar;
+            setAvatarDisplay(btn.dataset.avatar, false);
+            if (State.character) {
+                State.character.avatar = btn.dataset.avatar;
+                State.character.customAvatar = '';
+            }
         });
     });
+
+    // 自定义头像上传
+    document.getElementById('uploadAvatarBtn').addEventListener('click', () => {
+        document.getElementById('avatarFileInput').click();
+    });
+    document.getElementById('avatarFileInput').addEventListener('change', (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        if (!file.type.startsWith('image/')) {
+            showToast('请选择图片文件', 'error');
+            return;
+        }
+        if (file.size > 2 * 1024 * 1024) {
+            showToast('图片不要超过 2MB', 'error');
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            const dataUrl = ev.target.result;
+            clearAvatarSelection();
+            setAvatarDisplay(dataUrl, true);
+            document.getElementById('clearCustomAvatarBtn').style.display = 'inline-block';
+            if (State.character) {
+                State.character.avatar = '';
+                State.character.customAvatar = dataUrl;
+            }
+            showToast('头像已更新，记得保存', 'success');
+        };
+        reader.readAsDataURL(file);
+    });
+    document.getElementById('clearCustomAvatarBtn').addEventListener('click', () => {
+        document.getElementById('avatarFileInput').value = '';
+        document.getElementById('clearCustomAvatarBtn').style.display = 'none';
+        if (State.character) State.character.customAvatar = '';
+        // 恢复到第一个默认 emoji
+        const first = document.querySelector('.avatar-option');
+        if (first) first.click();
+    });
+}
+
+function clearAvatarSelection() {
+    document.querySelectorAll('.avatar-option').forEach(b => b.classList.remove('selected'));
+}
+
+function setAvatarDisplay(value, isImage) {
+    const preview = document.getElementById('avatarPreview');
+    preview.innerHTML = '';
+    if (isImage) {
+        const img = document.createElement('img');
+        img.src = value;
+        img.alt = 'avatar';
+        img.style.width = '100%';
+        img.style.height = '100%';
+        img.style.objectFit = 'cover';
+        img.style.borderRadius = '50%';
+        preview.appendChild(img);
+    } else {
+        preview.textContent = value || '🤖';
+    }
+}
+
+// 统一从 character 里渲染头像（img 或 emoji）
+function renderCharacterAvatar(el, char) {
+    el.innerHTML = '';
+    if (char?.customAvatar) {
+        const img = document.createElement('img');
+        img.src = char.customAvatar;
+        img.style.width = '100%';
+        img.style.height = '100%';
+        img.style.objectFit = 'cover';
+        img.style.borderRadius = '50%';
+        el.appendChild(img);
+    } else {
+        el.textContent = char?.avatar || '🤖';
+    }
 }
 
 // ---------- 人物设定表单 ----------
@@ -190,25 +272,23 @@ function initCharacterForm() {
             showToast('请输入人物名称', 'error');
             return;
         }
-        
+
+        const emojiAvatar = document.querySelector('.avatar-option.selected')?.dataset.avatar || '';
+        const existingCustom = State.character?.customAvatar || '';
+
         State.character = {
-            avatar: document.querySelector('.avatar-option.selected')?.dataset.avatar || '🤖',
+            avatar: emojiAvatar,
+            customAvatar: existingCustom,
             name,
             identity: document.getElementById('charIdentity').value.trim(),
+            ageGroup: document.getElementById('charAgeGroup').value,
             personality: document.getElementById('charPersonality').value.trim(),
             background: document.getElementById('charBackground').value.trim(),
             greeting: document.getElementById('charGreeting').value.trim()
         };
-        
+
         saveToStorage();
         updateCharacterPreview();
-        
-        // 更新头像选中
-        document.querySelectorAll('.avatar-option').forEach(b => {
-            b.classList.toggle('selected', b.dataset.avatar === State.character.avatar);
-        });
-        document.getElementById('avatarPreview').textContent = State.character.avatar;
-        
         showToast('✨ 人物设定已保存', 'success');
     });
 
@@ -223,18 +303,27 @@ function initCharacterForm() {
 }
 
 function populateCharacterForm() {
-    if (!State.character) return;
-    
-    document.getElementById('charName').value = State.character.name || '';
-    document.getElementById('charIdentity').value = State.character.identity || '';
-    document.getElementById('charPersonality').value = State.character.personality || '';
-    document.getElementById('charBackground').value = State.character.background || '';
-    document.getElementById('charGreeting').value = State.character.greeting || '';
-    
+    const c = State.character;
+    if (!c) return;
+
+    document.getElementById('charName').value = c.name || '';
+    document.getElementById('charIdentity').value = c.identity || '';
+    document.getElementById('charAgeGroup').value = c.ageGroup || '';
+    document.getElementById('charPersonality').value = c.personality || '';
+    document.getElementById('charBackground').value = c.background || '';
+    document.getElementById('charGreeting').value = c.greeting || '';
+
+    // 头像：emoji 选中 + 预览
     document.querySelectorAll('.avatar-option').forEach(b => {
-        b.classList.toggle('selected', b.dataset.avatar === State.character.avatar);
+        b.classList.toggle('selected', b.dataset.avatar === c.avatar);
     });
-    document.getElementById('avatarPreview').textContent = State.character.avatar || '🤖';
+    if (c.customAvatar) {
+        setAvatarDisplay(c.customAvatar, true);
+        document.getElementById('clearCustomAvatarBtn').style.display = 'inline-block';
+    } else {
+        setAvatarDisplay(c.avatar || '🤖', false);
+        document.getElementById('clearCustomAvatarBtn').style.display = 'none';
+    }
 }
 
 function openPresetModal() {
@@ -447,12 +536,19 @@ async function sendRequest(messages, temperature) {
     let systemPrompt = '你是一个角色扮演助手。';
     if (State.character) {
         const c = State.character;
+        const ageLabel = AGE_LABEL_MAP[c.ageGroup];
         systemPrompt = `请扮演以下角色，始终以该角色的身份和语气回答，不要跳出角色：
 
 【角色名称】：${c.name}
 ${c.identity ? `【身份/职业】：${c.identity}` : ''}
+${ageLabel ? `【年龄段】：${ageLabel}` : ''}
 ${c.personality ? `【性格特点】：${c.personality}` : ''}
 ${c.background ? `【背景故事】：${c.background}` : ''}
+
+关于回复格式的约定：
+- 可以用 *动作描写* 或 *表情* 来表现神态，例如：*微微一笑* 没关系的
+- *xxx* 之间的内容是动作、表情、心理活动，不是直接说出来的台词
+- 台词部分直接写出来即可，不需要加引号
 
 请自然地回应，不要在回复中说明自己是在扮演角色。用该角色的口吻说话。`;
     }
@@ -585,52 +681,58 @@ function addTypingIndicator() {
     const container = document.getElementById('chatMessages');
     const div = document.createElement('div');
     div.className = 'message ai';
-    div.innerHTML = `
-        <div class="msg-avatar">${State.character?.avatar || '🤖'}</div>
-        <div class="msg-content">
-            <div class="typing-indicator">
-                <span></span><span></span><span></span>
-            </div>
-        </div>
-    `;
+    const avatarEl = document.createElement('div');
+    avatarEl.className = 'msg-avatar';
+    renderCharacterAvatar(avatarEl, State.character);
+    const contentEl = document.createElement('div');
+    contentEl.className = 'msg-content';
+    contentEl.innerHTML = '<div class="typing-indicator"><span></span><span></span><span></span></div>';
+    div.appendChild(avatarEl);
+    div.appendChild(contentEl);
     container.appendChild(div);
     scrollToBottom();
+    return div;
+}
+
+function createMessageDiv(role, content) {
+    const div = document.createElement('div');
+    div.className = 'message ' + (role === 'user' ? 'user' : 'ai');
+    const avatarEl = document.createElement('div');
+    avatarEl.className = 'msg-avatar';
+    if (role === 'user') {
+        avatarEl.textContent = '🙂';
+    } else {
+        renderCharacterAvatar(avatarEl, State.character);
+    }
+    const contentEl = document.createElement('div');
+    contentEl.className = 'msg-content';
+    contentEl.innerHTML = formatMessage(content);
+    div.appendChild(avatarEl);
+    div.appendChild(contentEl);
     return div;
 }
 
 function renderMessages() {
     const container = document.getElementById('chatMessages');
     const empty = document.getElementById('chatEmpty');
-    
+
     if (State.messages.length === 0) {
         container.innerHTML = '';
         container.appendChild(empty);
         empty.style.display = 'block';
         return;
     }
-    
+
     container.innerHTML = '';
-    
-    // 如果有设定的角色，且没有历史消息，显示欢迎语
-    if (State.character && State.character.greeting && State.messages.length === 0) {
-        const welcomeMsg = document.createElement('div');
-        welcomeMsg.className = 'message ai';
-        welcomeMsg.innerHTML = `
-            <div class="msg-avatar">${State.character.avatar}</div>
-            <div class="msg-content">${escapeHtml(State.character.greeting)}</div>
-        `;
-        container.appendChild(welcomeMsg);
+
+    // 欢迎语（第一次，没有历史消息时）
+    if (State.character && State.character.greeting) {
+        const welcomeDiv = createMessageDiv('assistant', State.character.greeting);
+        container.appendChild(welcomeDiv);
     }
-    
+
     State.messages.forEach(msg => {
-        const div = document.createElement('div');
-        div.className = 'message ' + (msg.role === 'user' ? 'user' : 'ai');
-        const avatar = msg.role === 'user' ? '🙂' : (State.character?.avatar || '🤖');
-        div.innerHTML = `
-            <div class="msg-avatar">${avatar}</div>
-            <div class="msg-content">${formatMessage(msg.content)}</div>
-        `;
-        container.appendChild(div);
+        container.appendChild(createMessageDiv(msg.role, msg.content));
     });
 }
 
@@ -647,9 +749,11 @@ function scrollToBottom() {
 
 function formatMessage(text) {
     if (!text) return '';
-    // 简单处理换行和粗体
     let html = escapeHtml(text);
+    // **粗体**
     html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    // *动作/表情* -> 斜体动作（对话无关的旁白）
+    html = html.replace(/(^|[^\*])\*([^\*\n]+?)\*/g, '$1<em class="action">$2</em>');
     html = html.replace(/\n/g, '<br>');
     return html;
 }

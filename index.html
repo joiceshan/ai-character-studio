@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#667eea">
     <title>AI 人物工坊 · Character Studio</title>
-    <link rel="stylesheet" href="css/style.css?v=3">
+    <link rel="stylesheet" href="css/style.css?v=4">
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
 </head>
 <body>
@@ -162,6 +162,11 @@
                     <div class="avatar-picker">
                         <label>选择头像</label>
                         <div class="avatar-grid" id="avatarGrid"></div>
+                        <div class="avatar-upload-row">
+                            <button type="button" class="btn-upload" id="uploadAvatarBtn">📷 从相册选</button>
+                            <button type="button" class="btn-clear-avatar" id="clearCustomAvatarBtn" style="display:none;">✕ 取消自定义</button>
+                            <input type="file" id="avatarFileInput" accept="image/*" hidden />
+                        </div>
                     </div>
                 </div>
 
@@ -176,6 +181,19 @@
                 </div>
 
                 <div class="form-group">
+                    <label>年龄段</label>
+                    <select id="charAgeGroup">
+                        <option value="">不指定</option>
+                        <option value="child">孩童 (0-12)</option>
+                        <option value="teen">少年 (13-17)</option>
+                        <option value="young">青年 (18-30)</option>
+                        <option value="adult">壮年 (31-50)</option>
+                        <option value="middle">中年 (51-65)</option>
+                        <option value="senior">老年 (65+)</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
                     <label>性格特点</label>
                     <textarea id="charPersonality" placeholder="描述性格、说话方式、口头禅等...&#10;例如：温柔体贴，说话总是带着微笑，喜欢用比喻"></textarea>
                 </div>
@@ -187,7 +205,7 @@
 
                 <div class="form-group">
                     <label>第一印象（可选）</label>
-                    <input type="text" id="charGreeting" placeholder="TA 跟你打招呼的第一句话" />
+                    <input type="text" id="charGreeting" placeholder="TA 跟你打招呼的第一句话&#10;可包含 *动作描写*，例如：*微微歪头* 你好呀" />
                 </div>
 
                 <button class="btn-primary btn-large" id="saveCharBtn">💾 保存人物设定</button>
@@ -281,6 +299,6 @@
     <!-- Toast 提示 -->
     <div class="toast" id="toast"></div>
 
-    <script src="js/app.js?v=3"></script>
+    <script src="js/app.js?v=4"></script>
 </body>
 </html>

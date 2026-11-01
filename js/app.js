@@ -273,6 +273,10 @@ function initSettingsForm() {
         const baseUrl = document.getElementById('apiBaseUrl');
         const model = document.getElementById('apiModel');
         switch (e.target.value) {
+            case 'deepseek':
+                baseUrl.value = 'https://api.deepseek.com/v1';
+                model.value = 'deepseek-chat';
+                break;
             case 'openai':
                 baseUrl.value = 'https://api.openai.com/v1';
                 model.value = 'gpt-4o-mini';
@@ -280,6 +284,10 @@ function initSettingsForm() {
             case 'claude':
                 baseUrl.value = 'https://api.anthropic.com/v1';
                 model.value = 'claude-3-haiku-20240307';
+                break;
+            case 'openrouter':
+                baseUrl.value = 'https://openrouter.ai/api/v1';
+                model.value = 'openai/gpt-4o-mini';
                 break;
             default:
                 baseUrl.value = '';

@@ -318,14 +318,23 @@ function initSettingsForm() {
     // 测试按钮
     document.getElementById('testApiBtn').addEventListener('click', async () => {
         collectApiSettings();
-        const statusEl = document.getElementById('apiStatus');
-        statusEl.style.display = 'none';
-        
+        hideApiStatus();
+
         if (!State.api.baseUrl || !State.api.apiKey) {
             showApiStatus('error', '请先填写 API Base URL 和 API Key');
             return;
         }
-        
+
+        // 明显的格式校验，避免无效 Key 白跑一趟
+        if (State.api.provider === 'deepseek' && !/^sk-[0-9a-zA-Z]{20,}$/.test(State.api.apiKey)) {
+            showApiStatus('error',
+                '❌ API Key 格式不正确\n' +
+                '你填的是：' + State.api.apiKey + '\n' +
+                'DeepSeek 的 Key 应为 sk- 开头、后面跟约 32 位字符，例如 sk-abcdef1234567890abcdef1234567890\n' +
+                '请到 https://platform.deepseek.com/api_keys 复制完整的 Key');
+            return;
+        }
+
         showLoading('正在测试连接...');
         try {
             const result = await rawTestConnection();
@@ -336,7 +345,7 @@ function initSettingsForm() {
             console.error('[API测试] 失败:', err);
             const detail = err.message || String(err);
             showApiStatus('error', '❌ ' + detail);
-            showToast('❌ ' + detail.substring(0, 50), 'error');
+            showToast('连接失败', 'error');
         } finally {
             hideLoading();
         }
@@ -367,6 +376,15 @@ function showApiStatus(type, msg) {
     const el = document.getElementById('apiStatus');
     el.className = 'api-status ' + type;
     el.textContent = msg;
+    // 关键：必须清掉 inline style，否则 class 里的 display:block 无法生效
+    el.style.display = 'block';
+}
+
+function hideApiStatus() {
+    const el = document.getElementById('apiStatus');
+    el.className = 'api-status';
+    el.textContent = '';
+    el.style.display = 'none';
 }
 
 // ---------- AI API 请求 ----------

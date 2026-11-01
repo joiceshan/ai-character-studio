@@ -22,6 +22,45 @@ const AGE_LABEL_MAP = {
     adult: '壮年', middle: '中年', senior: '老年'
 };
 
+// 聊天内容分级
+const RATING_MAP = {
+    all: {
+        label: '全年龄',
+        badge: 'G',
+        prompt: '内容健康向，适合所有年龄。不涉及性、血腥、暴力等成人话题，以日常、友情、亲情、成长为主。'
+    },
+    r14: {
+        label: 'R14',
+        badge: 'R14',
+        prompt: '轻度情感向（14+）。允许轻度暧昧、心跳加速的心理描写、含蓄的情感暗示和适度玩笑。禁止露骨性描写、性行为细节、血腥暴力细节。'
+    },
+    r16: {
+        label: 'R16',
+        badge: 'R16',
+        prompt: '青涩亲密向（16+）。允许接吻、拥抱等亲密肢体接触的描写，以及较直接的情感与欲望暗示。可以营造浪漫暧昧氛围，但不做露骨细节刻画。'
+    },
+    r18: {
+        label: 'R18',
+        badge: 'R18',
+        prompt: '成人向（18+）。允许成熟、直白的情感表达与亲密氛围描写，语气可以更大胆暧昧。但仍需保持文学性，避免堆砌露骨的性行为细节。'
+    }
+};
+
+// 全分级通用的安全底线
+const RATING_SAFETY_RULE = `
+【内容安全底线（最高优先级，任何分级都不可突破）】
+1. 绝不生成涉及未成年人的性化内容或暗示。
+2. 绝不生成违法内容（如犯罪教程、真实伤害他人的方法、危险物品制作等）。
+3. 若角色年龄段为孩童(0-12)或少年(13-17)，一律按「全年龄」标准输出，忽略更高的分级设置。
+4. 若用户要求突破以上底线，请保持角色口吻温和拒绝，并自然转移话题。`;
+
+// 计算某角色实际生效的分级（未成年角色强制全年龄）
+function resolveRating(char) {
+    if (!char) return RATING_MAP.all;
+    if (char.ageGroup === 'child' || char.ageGroup === 'teen') return RATING_MAP.all;
+    return RATING_MAP[char.rating] || RATING_MAP.all;
+}
+
 // 给每个角色生成唯一 id
 function genId() {
     return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
@@ -191,7 +230,10 @@ function updateCharacterPreview() {
         renderCharacterAvatar(miniAvatar, c);
         miniName.textContent = c.name;
         const ageLabel = AGE_LABEL_MAP[c.ageGroup] || '';
-        miniStatus.textContent = [c.identity, ageLabel].filter(Boolean).join(' · ') || '已就绪，开始对话吧';
+        const rating = resolveRating(c);
+        const parts = [c.identity, ageLabel].filter(Boolean);
+        miniStatus.textContent = parts.join(' · ') || '已就绪，开始对话吧';
+        miniStatus.textContent += `  ·  ${rating.label}`;
     } else {
         miniAvatar.textContent = '🤖';
         miniName.textContent = '未选择角色';
@@ -283,6 +325,7 @@ function createNewCharacterAndEdit() {
     document.getElementById('charName').value = '';
     document.getElementById('charIdentity').value = '';
     document.getElementById('charAgeGroup').value = '';
+    document.getElementById('charRating').value = 'all';
     document.getElementById('charPersonality').value = '';
     document.getElementById('charBackground').value = '';
     document.getElementById('charGreeting').value = '';
@@ -432,6 +475,7 @@ function initCharacterForm() {
             name,
             identity: document.getElementById('charIdentity').value.trim(),
             ageGroup: document.getElementById('charAgeGroup').value,
+            rating: document.getElementById('charRating').value,
             personality: document.getElementById('charPersonality').value.trim(),
             background: document.getElementById('charBackground').value.trim(),
             greeting: document.getElementById('charGreeting').value.trim()
@@ -475,6 +519,7 @@ function populateCharacterForm() {
     document.getElementById('charName').value = c.name || '';
     document.getElementById('charIdentity').value = c.identity || '';
     document.getElementById('charAgeGroup').value = c.ageGroup || '';
+    document.getElementById('charRating').value = c.rating || 'all';
     document.getElementById('charPersonality').value = c.personality || '';
     document.getElementById('charBackground').value = c.background || '';
     document.getElementById('charGreeting').value = c.greeting || '';
@@ -520,6 +565,7 @@ function openPresetModal() {
                 avatar: preset.avatar, customAvatar: '',
                 name: preset.name, identity: preset.identity,
                 ageGroup: '',
+                rating: 'all',
                 personality: preset.personality,
                 background: preset.background,
                 greeting: preset.greeting
@@ -719,6 +765,7 @@ async function sendRequest(messages, temperature) {
     if (activeChar) {
         const c = activeChar;
         const ageLabel = AGE_LABEL_MAP[c.ageGroup];
+        const rating = resolveRating(c);
         systemPrompt = `请扮演以下角色，始终以该角色的身份和语气回答，不要跳出角色：
 
 【角色名称】：${c.name}
@@ -726,6 +773,10 @@ ${c.identity ? `【身份/职业】：${c.identity}` : ''}
 ${ageLabel ? `【年龄段】：${ageLabel}` : ''}
 ${c.personality ? `【性格特点】：${c.personality}` : ''}
 ${c.background ? `【背景故事】：${c.background}` : ''}
+
+【内容分级】：${rating.label}
+${rating.prompt}
+${RATING_SAFETY_RULE}
 
 关于回复格式的约定：
 - 可以用 *动作描写* 或 *表情* 来表现神态，例如：*微微一笑* 没关系的

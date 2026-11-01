@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#667eea">
     <title>AI 人物工坊 · Character Studio</title>
-    <link rel="stylesheet" href="css/style.css?v=7">
+    <link rel="stylesheet" href="css/style.css?v=8">
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
 </head>
 <body>
@@ -217,6 +217,17 @@
                 </div>
 
                 <div class="form-group">
+                    <label>聊天内容分级</label>
+                    <select id="charRating">
+                        <option value="all">全年龄 · G（健康向）</option>
+                        <option value="r14">R14 · 轻度暧昧</option>
+                        <option value="r16">R16 · 亲密情感</option>
+                        <option value="r18">R18 · 成人向</option>
+                    </select>
+                    <span class="hint">控制 AI 回复的内容尺度。若角色年龄段为孩童或少年，将自动按全年龄输出。</span>
+                </div>
+
+                <div class="form-group">
                     <label>性格特点</label>
                     <textarea id="charPersonality" placeholder="描述性格、说话方式、口头禅等...&#10;例如：温柔体贴，说话总是带着微笑，喜欢用比喻"></textarea>
                 </div>
@@ -322,6 +333,6 @@
     <!-- Toast 提示 -->
     <div class="toast" id="toast"></div>
 
-    <script src="js/app.js?v=7"></script>
+    <script src="js/app.js?v=8"></script>
 </body>
 </html>

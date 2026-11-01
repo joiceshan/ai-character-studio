@@ -287,9 +287,15 @@ function createNewCharacterAndEdit() {
     document.getElementById('charBackground').value = '';
     document.getElementById('charGreeting').value = '';
     // 重置头像
+    pendingCustomAvatar = '';
     document.querySelectorAll('.avatar-option').forEach(b => b.classList.remove('selected'));
     const first = document.querySelector('.avatar-option');
-    if (first) first.click();
+    if (first) {
+        first.classList.add('selected');
+        setAvatarDisplay(first.dataset.avatar, false);
+    }
+    document.getElementById('avatarFileInput').value = '';
+    document.getElementById('clearCustomAvatarBtn').style.display = 'none';
     // 存一个标记，保存时当新建
     window.__charFormMode = 'new';
     window.__charFormEditId = null;
@@ -309,6 +315,9 @@ function switchToTab(tabName) {
     const btn = document.querySelector(`.tab-btn[data-tab="${tabName}"]`);
     if (btn) btn.click();
 }
+
+// 表当前正在编辑的自定义头像（base64），未保存前只存在这里
+let pendingCustomAvatar = '';
 
 // ---------- 头像网格 ----------
 function initAvatarGrid() {
@@ -345,15 +354,23 @@ function initAvatarGrid() {
         reader.onload = (ev) => {
             clearAvatarSelection();
             setAvatarDisplay(ev.target.result, true);
+            pendingCustomAvatar = ev.target.result;
             document.getElementById('clearCustomAvatarBtn').style.display = 'inline-block';
             showToast('头像已更新，记得点「保存人物设定」', 'success');
         };
         reader.readAsDataURL(file);
     });
-    document.getElementById('clearCustomAvatarBtn').addEventListener('click', clearCustomAvatarBtn);
+    document.getElementById('clearCustomAvatarBtn').addEventListener('click', () => {
+        clearCustomAvatarBtn();
+        // 取消自定义后回到第一个 emoji
+        const first = document.querySelector('.avatar-option');
+        if (first) first.classList.add('selected');
+        setAvatarDisplay(first?.dataset.avatar || '🤖', false);
+    });
 }
 
 function clearCustomAvatarBtn() {
+    pendingCustomAvatar = '';
     document.getElementById('avatarFileInput').value = '';
     document.getElementById('clearCustomAvatarBtn').style.display = 'none';
 }
@@ -409,13 +426,9 @@ function initCharacterForm() {
         const mode = window.__charFormMode || 'new';
         const editId = window.__charFormEditId;
 
-        // 如果是编辑但当前没有 customAvatar 存着，从表单里还原
-        const editExisting = editId ? State.characters.find(c => c.id === editId) : null;
-        const existingCustom = editExisting?.customAvatar || '';
-
         const charData = {
             avatar: emojiAvatar,
-            customAvatar: existingCustom,
+            customAvatar: pendingCustomAvatar,
             name,
             identity: document.getElementById('charIdentity').value.trim(),
             ageGroup: document.getElementById('charAgeGroup').value,
@@ -469,8 +482,11 @@ function populateCharacterForm() {
     document.querySelectorAll('.avatar-option').forEach(b => {
         b.classList.toggle('selected', b.dataset.avatar === c.avatar);
     });
-    if (c.customAvatar) {
-        setAvatarDisplay(c.customAvatar, true);
+
+    // 关键：同步编辑中的自定义头像，保存时用这个值
+    pendingCustomAvatar = c.customAvatar || '';
+    if (pendingCustomAvatar) {
+        setAvatarDisplay(pendingCustomAvatar, true);
         document.getElementById('clearCustomAvatarBtn').style.display = 'inline-block';
     } else {
         setAvatarDisplay(c.avatar || '🤖', false);

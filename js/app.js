@@ -320,11 +320,12 @@ function initSettingsForm() {
         
         showLoading('正在测试连接...');
         try {
-            await sendRequest([{ role: 'user', content: 'hi' }], 0.1);
-            showApiStatus('success', '✅ 连接成功！API 配置正确');
+            const result = await rawTestConnection();
+            showApiStatus('success', '✅ 连接成功！AI 回复:「' + result + '」');
             showToast('连接成功', 'success');
         } catch (err) {
-            showApiStatus('error', '❌ 连接失败: ' + err.message);
+            const detail = err.stack ? err.stack.split('\n')[0] : err.message;
+            showApiStatus('error', '❌ 连接失败\n' + detail);
             showToast('连接失败', 'error');
         } finally {
             hideLoading();
@@ -359,6 +360,56 @@ function showApiStatus(type, msg) {
 }
 
 // ---------- AI API 请求 ----------
+
+// 简单直接测试连接（不带角色设定）
+async function rawTestConnection() {
+    const url = `${State.api.baseUrl}/chat/completions`;
+    const body = JSON.stringify({
+        model: State.api.model,
+        messages: [{ role: 'user', content: 'hi' }],
+        max_tokens: 20
+    });
+
+    let response;
+    try {
+        response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${State.api.apiKey}`
+            },
+            body: body
+        });
+    } catch (networkErr) {
+        // 网络层错误（CORS、DNS、SSL、连接拒绝等）
+        throw new Error('网络错误: ' + networkErr.message);
+    }
+
+    const text = await response.text();
+    
+    if (!response.ok) {
+        let detail = text;
+        try {
+            const j = JSON.parse(text);
+            detail = j.error?.message || j.message || text;
+        } catch {}
+        
+        // 常见错误友好提示
+        if (response.status === 401) detail = 'API Key 无效或格式错误 (401)\n' + detail;
+        else if (response.status === 404) detail = 'API 地址错误或模型不存在 (404)\n' + detail;
+        else if (response.status === 429) detail = '请求频率超限 (429)\n' + detail;
+        
+        throw new Error(`HTTP ${response.status}: ${detail}`);
+    }
+
+    try {
+        const data = JSON.parse(text);
+        return data.choices?.[0]?.message?.content || '(空回复)';
+    } catch (parseErr) {
+        throw new Error('响应解析失败: ' + text.slice(0, 200));
+    }
+}
+
 async function sendRequest(messages, temperature) {
     if (!State.api.baseUrl || !State.api.apiKey) {
         throw new Error('请先在「API」页面配置接口');
@@ -383,27 +434,42 @@ ${c.background ? `【背景故事】：${c.background}` : ''}
         ...messages
     ];
 
-    const response = await fetch(`${State.api.baseUrl}/chat/completions`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${State.api.apiKey}`
-        },
-        body: JSON.stringify({
-            model: State.api.model,
-            messages: fullMessages,
-            temperature: temperature ?? State.api.temperature,
-            stream: false
-        })
-    });
-
-    if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        throw new Error(err.error?.message || `HTTP ${response.status}`);
+    const url = `${State.api.baseUrl}/chat/completions`;
+    let response;
+    try {
+        response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${State.api.apiKey}`
+            },
+            body: JSON.stringify({
+                model: State.api.model,
+                messages: fullMessages,
+                temperature: temperature ?? State.api.temperature,
+                stream: false
+            })
+        });
+    } catch (networkErr) {
+        throw new Error('网络错误（可能是 CORS 或无法连接）: ' + networkErr.message);
     }
 
-    const data = await response.json();
-    return data.choices[0].message.content || '';
+    const text = await response.text();
+    if (!response.ok) {
+        let detail = text;
+        try {
+            const j = JSON.parse(text);
+            detail = j.error?.message || j.message || text;
+        } catch {}
+        throw new Error(`${response.status}: ${detail}`);
+    }
+
+    try {
+        const data = JSON.parse(text);
+        return data.choices[0].message.content || '';
+    } catch {
+        throw new Error('响应格式异常: ' + text.slice(0, 100));
+    }
 }
 
 // ---------- 对话功能 ----------

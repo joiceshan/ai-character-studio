@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#667eea">
+    <title>AI 人物工坊 · Character Studio</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- 顶部导航 -->
+    <header class="app-header">
+        <div class="header-inner">
+            <div class="logo">
+                <span class="logo-icon">✨</span>
+                <span class="logo-text">AI 人物工坊</span>
+            </div>
+            <nav class="tab-nav" id="tabNav">
+                <button class="tab-btn active" data-tab="chat">
+                    <span class="tab-icon">💬</span>
+                    <span class="tab-label">对话</span>
+                </button>
+                <button class="tab-btn" data-tab="write">
+                    <span class="tab-icon">✍️</span>
+                    <span class="tab-label">写作</span>
+                </button>
+                <button class="tab-btn" data-tab="character">
+                    <span class="tab-icon">🎭</span>
+                    <span class="tab-label">设定</span>
+                </button>
+                <button class="tab-btn" data-tab="settings">
+                    <span class="tab-icon">⚙️</span>
+                    <span class="tab-label">API</span>
+                </button>
+            </nav>
+        </div>
+    </header>
+
+    <main class="app-main">
+        <!-- 对话页面 -->
+        <section class="tab-content active" id="tab-chat">
+            <div class="chat-header-bar">
+                <div class="character-mini" id="chatCharacterPreview">
+                    <div class="mini-avatar" id="miniAvatar">🤖</div>
+                    <div class="mini-info">
+                        <div class="mini-name" id="miniName">未设定角色</div>
+                        <div class="mini-status" id="miniStatus">请先去「设定」创建人物</div>
+                    </div>
+                </div>
+                <button class="btn-icon" id="clearChatBtn" title="清空对话">🗑️</button>
+            </div>
+            
+            <div class="chat-messages" id="chatMessages">
+                <div class="empty-state" id="chatEmpty">
+                    <div class="empty-icon">🎭</div>
+                    <h3>开始和 TA 对话吧</h3>
+                    <p>先去「设定」创建一个你的专属人物</p>
+                </div>
+            </div>
+
+            <div class="chat-input-area">
+                <div class="quick-prompts" id="quickPrompts" style="display:none;">
+                    <button class="quick-prompt">你好，请自我介绍</button>
+                    <button class="quick-prompt">聊聊你的爱好</button>
+                    <button class="quick-prompt">给我讲个故事</button>
+                </div>
+                <div class="input-row">
+                    <textarea 
+                        id="chatInput" 
+                        placeholder="输入消息... (Enter 发送, Shift+Enter 换行)"
+                        rows="1"
+                    ></textarea>
+                    <button class="btn-send" id="sendBtn">
+                        <span>发送</span>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- 写作页面 -->
+        <section class="tab-content" id="tab-write">
+            <div class="write-header">
+                <h2>✍️ AI 写作助手</h2>
+                <p class="write-subtitle">让你的人物帮你创作文章</p>
+            </div>
+            
+            <div class="write-form">
+                <div class="form-group">
+                    <label>写作类型</label>
+                    <div class="type-grid">
+                        <button class="type-btn active" data-type="article">📄 文章</button>
+                        <button class="type-btn" data-type="story">📖 故事</button>
+                        <button class="type-btn" data-type="poem">🌸 诗歌</button>
+                        <button class="type-btn" data-type="letter">✉️ 信件</button>
+                        <button class="type-btn" data-type="essay">📝 随笔</button>
+                        <button class="type-btn" data-type="speech">🎤 演讲稿</button>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>主题 / 关键词</label>
+                    <input type="text" id="writeTopic" placeholder="例如：秋天的校园、给十年后的自己..." />
+                </div>
+
+                <div class="form-group">
+                    <label>写作要求（可选）</label>
+                    <textarea id="writeRequirements" placeholder="字数、风格、视角、语气等..."></textarea>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>长度</label>
+                        <select id="writeLength">
+                            <option value="short">短篇 (~300字)</option>
+                            <option value="medium" selected>中篇 (~800字)</option>
+                            <option value="long">长篇 (~1500字)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>风格</label>
+                        <select id="writeStyle">
+                            <option value="default">默认</option>
+                            <option value="formal">正式书面</option>
+                            <option value="casual">轻松随意</option>
+                            <option value="literary">文艺优美</option>
+                            <option value="humorous">幽默风趣</option>
+                        </select>
+                    </div>
+                </div>
+
+                <button class="btn-primary btn-large" id="generateBtn">
+                    <span>✨ 开始创作</span>
+                </button>
+            </div>
+
+            <div class="write-output" id="writeOutput" style="display:none;">
+                <div class="output-header">
+                    <h3 id="outputTitle">生成结果</h3>
+                    <div class="output-actions">
+                        <button class="btn-secondary" id="copyOutputBtn">📋 复制</button>
+                        <button class="btn-secondary" id="regenerateBtn">🔄 重新生成</button>
+                    </div>
+                </div>
+                <div class="output-content" id="outputContent"></div>
+            </div>
+        </section>
+
+        <!-- 人物设定页面 -->
+        <section class="tab-content" id="tab-character">
+            <div class="char-header">
+                <h2>🎭 人物设定</h2>
+                <div class="char-actions">
+                    <button class="btn-secondary" id="loadPresetBtn">📚 预设角色</button>
+                </div>
+            </div>
+
+            <div class="char-form">
+                <div class="avatar-section">
+                    <div class="avatar-preview" id="avatarPreview">🤖</div>
+                    <div class="avatar-picker">
+                        <label>选择头像</label>
+                        <div class="avatar-grid" id="avatarGrid"></div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>人物名称 *</label>
+                    <input type="text" id="charName" placeholder="例如：小明、林黛玉、爱因斯坦..." maxlength="20" />
+                </div>
+
+                <div class="form-group">
+                    <label>身份 / 职业</label>
+                    <input type="text" id="charIdentity" placeholder="例如：大学生、古代诗人、科学家..." />
+                </div>
+
+                <div class="form-group">
+                    <label>性格特点</label>
+                    <textarea id="charPersonality" placeholder="描述性格、说话方式、口头禅等...&#10;例如：温柔体贴，说话总是带着微笑，喜欢用比喻"></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label>背景故事</label>
+                    <textarea id="charBackground" placeholder="人物的经历、故事、世界观..."></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label>第一印象（可选）</label>
+                    <input type="text" id="charGreeting" placeholder="TA 跟你打招呼的第一句话" />
+                </div>
+
+                <button class="btn-primary btn-large" id="saveCharBtn">💾 保存人物设定</button>
+            </div>
+
+            <!-- 预设角色弹窗 -->
+            <div class="modal-overlay" id="presetModal" style="display:none;">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3>📚 预设角色</h3>
+                        <button class="btn-icon" id="closePresetBtn">✕</button>
+                    </div>
+                    <div class="preset-list" id="presetList"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- API 设置页面 -->
+        <section class="tab-content" id="tab-settings">
+            <div class="settings-header">
+                <h2>⚙️ API 设置</h2>
+                <p class="settings-subtitle">配置 AI 接口后即可使用</p>
+            </div>
+
+            <div class="settings-form">
+                <div class="form-group">
+                    <label>API 提供商</label>
+                    <select id="apiProvider">
+                        <option value="custom">自定义 / OpenAI 兼容</option>
+                        <option value="openai">OpenAI</option>
+                        <option value="claude">Anthropic Claude</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>API Base URL</label>
+                    <input type="text" id="apiBaseUrl" placeholder="https://api.openai.com/v1" />
+                    <small class="hint">所有兼容 OpenAI 格式的接口都可以用</small>
+                </div>
+
+                <div class="form-group">
+                    <label>API Key</label>
+                    <div class="password-field">
+                        <input type="password" id="apiKey" placeholder="sk-..." />
+                        <button class="btn-icon" id="toggleKeyVisibility" type="button">👁️</button>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>模型名称</label>
+                    <input type="text" id="apiModel" placeholder="gpt-4o-mini" value="gpt-4o-mini" />
+                </div>
+
+                <div class="form-group">
+                    <label>
+                        温度 (Temperature)
+                        <span class="slider-value" id="tempValue">0.7</span>
+                    </label>
+                    <input type="range" id="apiTemperature" min="0" max="2" step="0.1" value="0.7" />
+                    <small class="hint">越低越稳定，越高越有创意</small>
+                </div>
+
+                <button class="btn-primary btn-large" id="testApiBtn">🔗 测试连接</button>
+                <button class="btn-secondary btn-large" id="saveApiBtn" style="margin-top:10px;">💾 保存设置</button>
+
+                <div class="api-status" id="apiStatus"></div>
+
+                <div class="info-box">
+                    <h4>💡 使用说明</h4>
+                    <ul>
+                        <li>API Key 保存在你的浏览器本地，不会上传任何服务器</li>
+                        <li>支持所有 OpenAI 兼容接口（OpenRouter、阿里云、DeepSeek 等）</li>
+                        <li>推荐使用 gpt-4o-mini 或 claude-3-haiku 性价比最高</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- 加载动画 -->
+    <div class="loading-overlay" id="loadingOverlay" style="display:none;">
+        <div class="loading-content">
+            <div class="loading-spinner"></div>
+            <div class="loading-text" id="loadingText">AI 正在思考中...</div>
+        </div>
+    </div>
+
+    <!-- Toast 提示 -->
+    <div class="toast" id="toast"></div>
+
+    <script src="js/app.js"></script>
+</body>
+</html>

@@ -1152,15 +1152,6 @@ function switchToTab(tabName) {
 
 // ---------- 写作功能 ----------
 function initWrite() {
-    // 类型切换
-    document.querySelectorAll('.type-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            document.querySelectorAll('.type-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            State.currentWriteType = btn.dataset.type;
-        });
-    });
-
     // 生成按钮
     document.getElementById('generateBtn').addEventListener('click', generateArticle);
 
@@ -1181,7 +1172,7 @@ async function generateArticle() {
     const requirements = document.getElementById('writeRequirements').value.trim();
     const length = document.getElementById('writeLength').value;
     const style = document.getElementById('writeStyle').value;
-    const type = State.currentWriteType;
+    const ratingKey = document.getElementById('writeRating').value;
 
     if (!topic) {
         showToast('请输入写作主题', 'error');
@@ -1195,46 +1186,60 @@ async function generateArticle() {
     }
 
     const lengthMap = { short: '约300字', medium: '约800字', long: '约1500字' };
-    const typeMap = {
-        article: '文章',
-        story: '故事',
-        poem: '诗歌',
-        letter: '信件',
-        essay: '随笔',
-        speech: '演讲稿'
+    const styleMap = {
+        default: '自然流畅、娓娓道来',
+        formal: '正式书面、严谨规范',
+        casual: '轻松随意、口语化',
+        literary: '文艺优美、辞藻华丽',
+        humorous: '幽默风趣、诙谐调侃',
+        poetic: '诗意浪漫、意境悠远',
+        melancholy: '伤感忧郁、细腻绵长',
+        tense: '紧张悬疑、节奏紧凑',
+        intimate: '亲密温柔、细腻动人',
+        bold: '大胆直白、坦率真诚'
     };
 
-    let systemPrompt = '你是一位才华横溢的作家。';
+    // 分级安全处理：未成年角色强制全年龄
+    let effectiveRating = RATING_MAP[ratingKey] || RATING_MAP.all;
     const activeChar = getActiveChar();
-    if (activeChar) {
-        const c = activeChar;
-        systemPrompt = `请以以下人物的身份和风格进行创作：
-
-【角色】：${c.name}
-${c.identity ? `【身份】：${c.identity}` : ''}
-${c.personality ? `【性格/风格】：${c.personality}` : ''}
-${c.background ? `【背景】：${c.background}` : ''}
-
-创作时请保持该角色的独特风格和语言特点。`;
+    if (activeChar && (activeChar.ageGroup === 'child' || activeChar.ageGroup === 'teen')) {
+        effectiveRating = RATING_MAP.all;
     }
 
-    let userPrompt = `请创作一篇${typeMap[type]}，主题：「${topic}」。
+    let systemPrompt = '你是一位才华横溢的作家，擅长根据人物身份进行创作。';
+    if (activeChar) {
+        const c = activeChar;
+        const ageLabel = AGE_LABEL_MAP[c.ageGroup] || '';
+        systemPrompt = `请以以下人物的身份和风格进行创作：
+
+【角色名称】：${c.name}
+${c.identity ? `【身份/职业】：${c.identity}` : ''}
+${ageLabel ? `【年龄段】：${ageLabel}` : ''}
+${c.personality ? `【性格/风格】：${c.personality}` : ''}
+${c.background ? `【背景故事】：${c.background}` : ''}
+
+【内容分级】：${effectiveRating.label}
+${effectiveRating.prompt}
+${RATING_SAFETY_RULE}
+
+创作时请始终保持该角色的独特风格、语言特点和思维方式，让文字仿佛从角色内心自然流淌出来。`;
+    } else {
+        systemPrompt = `你是一位才华横溢的作家。
+
+【内容分级】：${effectiveRating.label}
+${effectiveRating.prompt}
+${RATING_SAFETY_RULE}`;
+    }
+
+    let userPrompt = `请创作一篇文章，主题：「${topic}」。
 
 要求：
 - 篇幅：${lengthMap[length]}
-- 风格：${style === 'default' ? '自然流畅' : style}
+- 风格：${styleMap[style] || style}
 ${requirements ? `- 额外要求：${requirements}` : ''}`;
 
     showLoading('✍️ 正在创作中...');
     try {
-        const response = await sendRequest(
-            [
-                { role: 'user', content: userPrompt }
-            ],
-            0.9
-        );
-        
-        // 直接用角色设定的 system prompt 版本
         const response2 = await fetch(`${State.api.baseUrl}/chat/completions`, {
             method: 'POST',
             headers: {
@@ -1257,13 +1262,13 @@ ${requirements ? `- 额外要求：${requirements}` : ''}`;
         }
 
         const data = await response2.json();
-        const content = data.choices[0].message.content || response;
-        
+        const content = data.choices[0].message.content;
+
         document.getElementById('writeOutput').style.display = 'block';
-        document.getElementById('outputTitle').textContent = `${typeMap[type]} · ${topic}`;
+        document.getElementById('outputTitle').textContent = `文章 · ${topic}`;
         document.getElementById('outputContent').innerHTML = formatWriteContent(content);
         document.getElementById('writeOutput').scrollIntoView({ behavior: 'smooth' });
-        
+
         showToast('✨ 创作完成', 'success');
     } catch (err) {
         showToast('❌ ' + err.message, 'error');

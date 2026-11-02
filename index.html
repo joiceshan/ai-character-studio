@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#667eea">
     <title>AI 人物工坊 · Character Studio</title>
-    <link rel="stylesheet" href="css/style.css?v=11">
+    <link rel="stylesheet" href="css/style.css?v=12">
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
 </head>
 <body>
@@ -112,25 +112,13 @@
             
             <div class="write-form">
                 <div class="form-group">
-                    <label>写作类型</label>
-                    <div class="type-grid">
-                        <button class="type-btn active" data-type="article">📄 文章</button>
-                        <button class="type-btn" data-type="story">📖 故事</button>
-                        <button class="type-btn" data-type="poem">🌸 诗歌</button>
-                        <button class="type-btn" data-type="letter">✉️ 信件</button>
-                        <button class="type-btn" data-type="essay">📝 随笔</button>
-                        <button class="type-btn" data-type="speech">🎤 演讲稿</button>
-                    </div>
-                </div>
-
-                <div class="form-group">
                     <label>主题 / 关键词</label>
-                    <input type="text" id="writeTopic" placeholder="例如：秋天的校园、给十年后的自己..." />
+                    <input type="text" id="writeTopic" placeholder="例如：秋天的校园、雨夜重逢、写给你的信..." />
                 </div>
 
                 <div class="form-group">
                     <label>写作要求（可选）</label>
-                    <textarea id="writeRequirements" placeholder="字数、风格、视角、语气等..."></textarea>
+                    <textarea id="writeRequirements" placeholder="字数、视角、叙事节奏、关键词等..."></textarea>
                 </div>
 
                 <div class="form-row">
@@ -145,13 +133,31 @@
                     <div class="form-group">
                         <label>风格</label>
                         <select id="writeStyle">
-                            <option value="default">默认</option>
+                            <option value="default">自然流畅</option>
                             <option value="formal">正式书面</option>
                             <option value="casual">轻松随意</option>
                             <option value="literary">文艺优美</option>
                             <option value="humorous">幽默风趣</option>
+                            <option value="poetic">诗意浪漫</option>
+                            <option value="melancholy">伤感忧郁</option>
+                            <option value="tense">紧张悬疑</option>
+                            <option value="intimate">亲密温柔</option>
+                            <option value="bold">大胆直白</option>
                         </select>
                     </div>
+                </div>
+
+                <div class="form-group">
+                    <label>内容分级</label>
+                    <select id="writeRating">
+                        <option value="all">G · 全年龄（健康向）</option>
+                        <option value="r14">R14 · 轻度暧昧</option>
+                        <option value="r16">R16 · 亲密情感</option>
+                        <option value="r18">R18 · 成人向</option>
+                        <option value="r20">R20 · 成熟进阶</option>
+                        <option value="r23">R23 · 完全成人向</option>
+                    </select>
+                    <div class="form-hint">未成年角色（孩童/少年）将强制按全年龄输出</div>
                 </div>
 
                 <button class="btn-primary btn-large" id="generateBtn">
@@ -350,6 +356,6 @@
     <!-- Toast 提示 -->
     <div class="toast" id="toast"></div>
 
-    <script src="js/app.js?v=11"></script>
+    <script src="js/app.js?v=12"></script>
 </body>
 </html>

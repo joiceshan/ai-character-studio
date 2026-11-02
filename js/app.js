@@ -814,7 +814,7 @@ ${RATING_SAFETY_RULE}
 
     const fullMessages = [
         { role: 'system', content: systemPrompt },
-        ...messages
+        ...messages.filter(m => m.role === 'user' || m.role === 'assistant')
     ];
 
     const url = `${State.api.baseUrl}/chat/completions`;
@@ -991,9 +991,14 @@ function initChat() {
 
 async function sendMessage() {
     const input = document.getElementById('chatInput');
+    const sendBtn = document.getElementById('sendBtn');
     const text = input.value.trim();
 
     if (!text) return;
+    if (State.sending) {
+        showToast('上一条还在回复中，请稍候', 'error');
+        return;
+    }
     const c = getActiveChar();
     if (!c) {
         showToast('请先在左侧选择一个角色', 'error');
@@ -1010,26 +1015,35 @@ async function sendMessage() {
     if (!State.conversations[id]) State.conversations[id] = [];
     const msgs = State.conversations[id];
 
-    // 添加用户消息
+    // 添加用户消息并立即保存（即使接口失败也不会丢失）
     msgs.push({ role: 'user', content: text });
     input.value = '';
     input.style.height = 'auto';
+    saveToStorage();
     renderMessages();
     scrollToBottom();
 
     // 显示打字动画
+    State.sending = true;
+    if (sendBtn) sendBtn.disabled = true;
     const typingEl = addTypingIndicator();
 
     try {
         const reply = await sendRequest(msgs);
         typingEl.remove();
         msgs.push({ role: 'assistant', content: reply });
+        saveToStorage();
         renderMessages();
         scrollToBottom();
-        saveToStorage();
     } catch (err) {
         typingEl.remove();
+        msgs.push({ role: 'error', content: '⚠️ 回复失败：' + err.message + '\n（可重新发送再试，或到「⚙️ API」检查配置）' });
+        renderMessages();
+        scrollToBottom();
         showToast('❌ ' + err.message, 'error');
+    } finally {
+        State.sending = false;
+        if (sendBtn) sendBtn.disabled = false;
     }
 }
 
@@ -1052,6 +1066,11 @@ function addTypingIndicator() {
 
 function createMessageDiv(role, content) {
     const div = document.createElement('div');
+    if (role === 'error') {
+        div.className = 'msg-error';
+        div.textContent = content;
+        return div;
+    }
     div.className = 'message ' + (role === 'user' ? 'user' : 'ai');
     const avatarEl = document.createElement('div');
     avatarEl.className = 'msg-avatar';
@@ -1070,20 +1089,18 @@ function createMessageDiv(role, content) {
 
 function renderMessages() {
     const container = document.getElementById('chatMessages');
-    const empty = document.getElementById('chatEmpty');
-    if (!container || !empty) return; // 页面没加载完或 tab 不可见时跳过
+    if (!container) return;
 
     const c = getActiveChar();
     const msgs = getActiveMessages();
 
-    // 保留 empty 节点（先摘出，后续按需重新 append）
-    empty.remove();
     container.innerHTML = '';
 
     if (!c) {
-        empty.innerHTML = '<div class="empty-icon">🎭</div><h3>选择一个角色开始对话</h3><p>左侧列表点选一个角色，或点 ➕ 新建</p>';
-        container.appendChild(empty);
-        empty.style.display = 'block';
+        const placeholder = document.createElement('div');
+        placeholder.className = 'empty-state';
+        placeholder.innerHTML = '<div class="empty-icon">🎭</div><h3>选择一个角色开始对话</h3><p>左侧列表点选一个角色，或点 ➕ 新建</p>';
+        container.appendChild(placeholder);
         return;
     }
 
@@ -1092,14 +1109,12 @@ function renderMessages() {
         if (c.greeting) {
             container.appendChild(createMessageDiv('assistant', c.greeting));
         }
-        empty.style.display = 'none';
         return;
     }
 
     msgs.forEach(msg => {
         container.appendChild(createMessageDiv(msg.role, msg.content));
     });
-    empty.style.display = 'none';
 }
 
 function restoreMessages() {

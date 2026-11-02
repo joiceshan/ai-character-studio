@@ -1497,3 +1497,23 @@ input[type="range"]::-webkit-slider-thumb {
 ::selection {
     background: rgba(102, 126, 234, 0.3);
 }
+
+/* 聊天错误提示气泡 */
+.msg-error {
+    max-width: 88%;
+    margin: 10px auto;
+    padding: 10px 14px;
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.35);
+    border-radius: 10px;
+    color: #b91c1c;
+    font-size: 13px;
+    line-height: 1.6;
+    text-align: center;
+    word-break: break-all;
+}
+
+#sendBtn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}

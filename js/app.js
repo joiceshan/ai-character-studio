@@ -1196,7 +1196,9 @@ async function generateArticle() {
         melancholy: '伤感忧郁、细腻绵长',
         tense: '紧张悬疑、节奏紧凑',
         intimate: '亲密温柔、细腻动人',
-        bold: '大胆直白、坦率真诚'
+        bold: '大胆直白、坦率真诚',
+        erotic: '情欲张力、暧昧挑逗、克制但诱人',
+        explicit: '露骨直白、坦率描写、不做遮掩'
     };
 
     // 分级安全处理：未成年角色强制全年龄
@@ -1205,6 +1207,19 @@ async function generateArticle() {
     if (activeChar && (activeChar.ageGroup === 'child' || activeChar.ageGroup === 'teen')) {
         effectiveRating = RATING_MAP.all;
     }
+
+    // 风格与分级匹配：erotic/explicit 在低于 R18 时降级为 bold
+    let effectiveStyleKey = style;
+    if ((style === 'erotic' || style === 'explicit') &&
+        !['r18', 'r20', 'r23'].includes(ratingKey)) {
+        effectiveStyleKey = 'bold';
+    }
+    // 未成年角色不允许 erotic/explicit
+    if ((style === 'erotic' || style === 'explicit') &&
+        activeChar && (activeChar.ageGroup === 'child' || activeChar.ageGroup === 'teen')) {
+        effectiveStyleKey = 'bold';
+    }
+    const effectiveStyle = styleMap[effectiveStyleKey] || styleMap.default;
 
     let systemPrompt = '你是一位才华横溢的作家，擅长根据人物身份进行创作。';
     if (activeChar) {
@@ -1235,7 +1250,7 @@ ${RATING_SAFETY_RULE}`;
 
 要求：
 - 篇幅：${lengthMap[length]}
-- 风格：${styleMap[style] || style}
+- 风格：${effectiveStyle}
 ${requirements ? `- 额外要求：${requirements}` : ''}`;
 
     showLoading('✍️ 正在创作中...');

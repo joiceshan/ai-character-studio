@@ -92,6 +92,8 @@ function saveToStorage() {
     } catch (e) {
         console.warn('保存失败:', e);
     }
+    // 写作页的人物下拉框也跟着刷新
+    refreshWriteCharSelect();
 }
 
 function loadFromStorage() {
@@ -1151,7 +1153,28 @@ function switchToTab(tabName) {
 }
 
 // ---------- 写作功能 ----------
+function refreshWriteCharSelect() {
+    const sel = document.getElementById('writeCharSelect');
+    if (!sel) return;
+    const prev = sel.value;
+    sel.innerHTML = '<option value="">— 无特定人物（纯写作）—</option>';
+    State.characters.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.id;
+        opt.textContent = `${c.avatar || '👤'} ${c.name}${c.identity ? ' · ' + c.identity : ''}`;
+        sel.appendChild(opt);
+    });
+    // 保留上次选择（如果角色还存在），否则默认选中当前激活角色
+    if (prev && State.characters.find(c => c.id === prev)) {
+        sel.value = prev;
+    } else if (State.activeCharacterId && State.characters.find(c => c.id === State.activeCharacterId)) {
+        sel.value = State.activeCharacterId;
+    }
+}
+
 function initWrite() {
+    refreshWriteCharSelect();
+
     // 生成按钮
     document.getElementById('generateBtn').addEventListener('click', generateArticle);
 
@@ -1201,9 +1224,17 @@ async function generateArticle() {
         explicit: '露骨直白、坦率描写、不做遮掩'
     };
 
+    // 从下拉框取选定的写作角色，没选则用当前激活角色，再没则 null
+    const writeCharId = document.getElementById('writeCharSelect')?.value;
+    let activeChar = null;
+    if (writeCharId) {
+        activeChar = State.characters.find(c => c.id === writeCharId) || null;
+    } else {
+        activeChar = getActiveChar();
+    }
+
     // 分级安全处理：未成年角色强制全年龄
     let effectiveRating = RATING_MAP[ratingKey] || RATING_MAP.all;
-    const activeChar = getActiveChar();
     if (activeChar && (activeChar.ageGroup === 'child' || activeChar.ageGroup === 'teen')) {
         effectiveRating = RATING_MAP.all;
     }

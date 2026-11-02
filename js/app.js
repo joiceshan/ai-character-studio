@@ -240,36 +240,35 @@ function updateCharacterPreview() {
     const miniAvatar = document.getElementById('miniAvatar');
     const miniName = document.getElementById('miniName');
     const miniStatus = document.getElementById('miniStatus');
+    const quickPrompts = document.getElementById('quickPrompts');
 
     const c = getActiveChar();
     if (c) {
-        renderCharacterAvatar(miniAvatar, c);
-        miniName.textContent = c.name;
+        if (miniAvatar) renderCharacterAvatar(miniAvatar, c);
+        if (miniName) miniName.textContent = c.name;
         const ageLabel = AGE_LABEL_MAP[c.ageGroup] || '';
         const rating = resolveRating(c);
         const parts = [c.identity, ageLabel].filter(Boolean);
-        miniStatus.textContent = parts.join(' · ') || '已就绪，开始对话吧';
-        miniStatus.textContent += `  ·  ${rating.label}`;
+        if (miniStatus) {
+            miniStatus.textContent = (parts.join(' · ') || '已就绪，开始对话吧') + `  ·  ${rating.label}`;
+        }
 
         // 聊天页分级快捷按钮
         const chip = document.getElementById('ratingChip');
         if (chip) {
             chip.style.display = 'inline-block';
             chip.textContent = `${rating.badge} ▾`;
-            const restricted = c.ageGroup === 'child' || c.ageGroup === 'teen';
-            chip.classList.toggle('restricted', restricted);
+            chip.classList.toggle('restricted', c.ageGroup === 'child' || c.ageGroup === 'teen');
         }
+        if (quickPrompts) quickPrompts.style.display = 'flex';
     } else {
-        miniAvatar.textContent = '🤖';
-        miniName.textContent = '未选择角色';
-        miniStatus.textContent = '点击左侧列表选择一个角色';
+        if (miniAvatar) miniAvatar.textContent = '🤖';
+        if (miniName) miniName.textContent = '未选择角色';
+        if (miniStatus) miniStatus.textContent = '点击左侧列表选择一个角色';
         const chip = document.getElementById('ratingChip');
         if (chip) chip.style.display = 'none';
+        if (quickPrompts) quickPrompts.style.display = 'none';
     }
-
-    // 快捷提示
-    const quickPrompts = document.getElementById('quickPrompts');
-    quickPrompts.style.display = c ? 'flex' : 'none';
 }
 
 // ---------- 角色侧边栏 ----------
@@ -1072,9 +1071,13 @@ function createMessageDiv(role, content) {
 function renderMessages() {
     const container = document.getElementById('chatMessages');
     const empty = document.getElementById('chatEmpty');
+    if (!container || !empty) return; // 页面没加载完或 tab 不可见时跳过
+
     const c = getActiveChar();
     const msgs = getActiveMessages();
 
+    // 保留 empty 节点（先摘出，后续按需重新 append）
+    empty.remove();
     container.innerHTML = '';
 
     if (!c) {
@@ -1089,14 +1092,8 @@ function renderMessages() {
         if (c.greeting) {
             container.appendChild(createMessageDiv('assistant', c.greeting));
         }
-        // 仍然 append 空 state 隐藏占位
         empty.style.display = 'none';
         return;
-    }
-
-    // 有历史消息时也显示欢迎语（如果配置了）
-    if (c.greeting && msgs.length > 0 && !msgs.find(m => m.role === 'assistant')) {
-        // no-op
     }
 
     msgs.forEach(msg => {

@@ -1930,3 +1930,40 @@ input[type="range"]::-webkit-slider-thumb {
     .chat-fab-group { bottom: calc(72px + env(safe-area-inset-bottom, 0px)); gap: 6px; }
     .chat-fab { width: 36px; height: 36px; font-size: 14px; }
 }
+
+/* ========== 顶部栏内嵌滚动按钮（↑ ↓） ========== */
+.chat-scroll-tools {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    margin-left: auto;
+    margin-right: 4px;
+}
+
+.btn-icon-sm {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(102, 126, 234, 0.08);
+    color: #667eea;
+    font-size: 12px;
+    font-weight: bold;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s, transform 0.1s;
+    -webkit-tap-highlight-color: transparent;
+    line-height: 1;
+    padding: 0;
+}
+.btn-icon-sm:hover {
+    background: rgba(102, 126, 234, 0.18);
+}
+.btn-icon-sm:active {
+    background: rgba(102, 126, 234, 0.3);
+    transform: scale(0.92);
+}
+
+.chat-scroll-tools { display: none; } /* 默认隐藏，JS 控制 */

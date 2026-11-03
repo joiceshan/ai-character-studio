@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#667eea">
     <title>AI 人物工坊 · Character Studio</title>
-    <link rel="stylesheet" href="css/style.css?v=19">
+    <link rel="stylesheet" href="css/style.css?v=20">
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
 </head>
 <body>
@@ -67,6 +67,10 @@
                             </div>
                         </div>
                         <button class="rating-chip" id="ratingChip" title="切换内容分级" style="display:none;">G ▾</button>
+                        <div class="chat-scroll-tools" id="chatScrollTools">
+                            <button class="btn-icon-sm" id="fabTopInline" title="回到顶部" aria-label="回到顶部">↑</button>
+                            <button class="btn-icon-sm" id="fabBottomInline" title="滚到底部" aria-label="滚到底部">↓</button>
+                        </div>
                         <button class="btn-icon" id="clearChatBtn" title="删除对话内容">🗑️</button>
                     </div>
 
@@ -387,6 +391,6 @@
     <!-- Toast 提示 -->
     <div class="toast" id="toast"></div>
 
-    <script src="js/app.js?v=19"></script>
+    <script src="js/app.js?v=20"></script>
 </body>
 </html>

@@ -1243,6 +1243,9 @@ function renderMessages() {
     msgs.forEach((msg, i) => {
         container.appendChild(createMessageDiv(msg.role, msg.content, i, deleteAtIndex));
     });
+
+    // 通知 body-mounted FAB 重新检测是否该显示
+    if (State.__refreshFab) State.__refreshFab();
 }
 
 function restoreMessages() {
@@ -1259,21 +1262,30 @@ function scrollToBottom() {
 // ---------- 聊天浮动滚动按钮 ----------
 function initChatFab() {
     const container = document.getElementById('chatMessages');
-    const fabGroup = document.getElementById('chatFabGroup');
-    if (!container || !fabGroup) return;
+    if (!container) return;
+
+    // 动态创建 FAB 挂到 body，彻底绕开祖先布局的 overflow/transform 裁切
+    const fabGroup = document.createElement('div');
+    fabGroup.className = 'chat-fab-group';
+    fabGroup.id = 'chatFabGroup';
+    fabGroup.style.display = 'none';
+    fabGroup.innerHTML = `
+        <button class="chat-fab" id="fabTop" title="回到顶部" aria-label="回到顶部">↑</button>
+        <button class="chat-fab" id="fabBottom" title="滚到底部" aria-label="滚到底部">↓</button>
+    `;
+    document.body.appendChild(fabGroup);
 
     const updateVisibility = () => {
         const { scrollHeight, clientHeight } = container;
-        // 内容高度不够滚动时不显示
         fabGroup.style.display = (scrollHeight <= clientHeight + 20) ? 'none' : 'flex';
     };
 
     container.addEventListener('scroll', updateVisibility, { passive: true });
 
-    document.getElementById('fabTop').addEventListener('click', () => {
+    fabGroup.querySelector('#fabTop').addEventListener('click', () => {
         container.scrollTo({ top: 0, behavior: 'smooth' });
     });
-    document.getElementById('fabBottom').addEventListener('click', () => {
+    fabGroup.querySelector('#fabBottom').addEventListener('click', () => {
         container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
     });
 
@@ -1281,21 +1293,26 @@ function initChatFab() {
     const vv = window.visualViewport;
     if (vv) {
         const onViewport = () => {
-            // 键盘弹起时 viewport.height < window.innerHeight
             const diff = window.innerHeight - vv.height;
+            const baseMobile = window.innerWidth <= 640 ? 96 : 78;
             if (diff > 60) {
-                // 键盘弹起 → 浮动按钮往上移
-                fabGroup.style.bottom = (96 + diff) + 'px';
+                fabGroup.style.bottom = (baseMobile + diff) + 'px';
             } else {
-                fabGroup.style.bottom = ''; // 回到 CSS 默认
+                fabGroup.style.bottom = '';
             }
         };
         vv.addEventListener('resize', onViewport);
         vv.addEventListener('scroll', onViewport);
     }
 
-    // 初次渲染后也检查一次
-    setTimeout(updateVisibility, 300);
+    // 初次 / 切 tab / 切角色 后都重新检查
+    const triggerUpdate = () => setTimeout(updateVisibility, 350);
+    window.addEventListener('resize', triggerUpdate);
+
+    // 暴露到外部，让 renderMessages 后也能触发
+    State.__refreshFab = triggerUpdate;
+
+    setTimeout(updateVisibility, 400);
 }
 
 function formatMessage(text) {

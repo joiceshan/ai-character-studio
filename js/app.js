@@ -209,7 +209,6 @@ document.addEventListener('DOMContentLoaded', () => {
     initWrite();
     initChatFab();
     initFontSize();
-    initHeaderAutoHide();
     updateUI();
 });
 
@@ -1310,34 +1309,6 @@ function initChatFab() {
         scrollChatTo(isTop ? 'top' : 'bottom');
         showToast(isTop ? '已回到顶部' : '已滚到最新');
     });
-}
-
-// ---------- 移动端吸顶信息栏：往下翻收起，往上翻带回 ----------
-function initHeaderAutoHide() {
-    const bar = document.querySelector('.chat-header-bar');
-    if (!bar) return;
-
-    let lastY = window.scrollY || 0;
-    let ticking = false;
-
-    window.addEventListener('scroll', () => {
-        if (ticking) return;
-        ticking = true;
-        requestAnimationFrame(() => {
-            ticking = false;
-            if (window.innerWidth > 640) {
-                bar.classList.remove('hide');
-                return;
-            }
-            const y = window.scrollY || 0;
-            const delta = y - lastY;
-
-            if (y < 80) bar.classList.remove('hide');        // 顶部回来时始终显示
-            else if (delta > 8) bar.classList.add('hide');    // 向下翻 → 收起
-            else if (delta < -8) bar.classList.remove('hide'); // 向上翻 → 带回来
-            lastY = y;
-        });
-    }, { passive: true });
 }
 
 // ---------- 聊天字号调节 ----------

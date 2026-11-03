@@ -1334,8 +1334,23 @@ input[type="range"]::-webkit-slider-thumb {
 
 /* ---------- 响应式：移动端 ---------- */
 @media (max-width: 640px) {
+    /* App 式固定窗口：整页不再滚动，只有消息列表内部滚动，
+       这样顶部信息栏永远不会被滚走，输入框也固定在底部 */
+    html, body {
+        height: 100%;
+        overflow: hidden;
+        overscroll-behavior: none;
+    }
+
     body {
-        overflow: auto;
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+        height: 100dvh;
+    }
+
+    .app-header {
+        flex-shrink: 0;
     }
 
     .chat-layout {
@@ -1402,8 +1417,10 @@ input[type="range"]::-webkit-slider-thumb {
     }
 
     .app-main {
+        flex: 1;
+        min-height: 0;
         height: auto;
-        min-height: calc(100vh - 100px);
+        overflow: hidden;
     }
 
     .tab-content {
@@ -1843,7 +1860,9 @@ input[type="range"]::-webkit-slider-thumb {
         padding-right: 10px;
     }
     .chat-messages {
-        padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)) !important;
+        padding-bottom: 12px !important;
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior: contain;
     }
 
     /* 消息气泡调整 */
@@ -1970,36 +1989,16 @@ input[type="range"]::-webkit-slider-thumb {
     transform: scale(0.92);
 }
 
-/* ========== 移动端：顶部信息栏吸顶（向上翻会带回来） ========== */
+/* ========== 移动端：滚动性能 ========== */
 @media (max-width: 640px) {
-    /* 让 body 成为唯一滚动容器，吸顶才会生效 */
-    .tab-content,
-    .chat-layout,
-    .chat-main {
-        overflow: visible;
-    }
-
-    .chat-header-bar {
-        position: sticky;
-        top: env(safe-area-inset-top, 0px);
-        z-index: 130;
-        margin: -12px -12px 12px;   /* 抵消 .tab-content 的 12px 内边距，通栏贴顶 */
-        border-radius: 0;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
-        transition: transform 0.25s ease;
-        will-change: transform;
-    }
-
-    .chat-header-bar.hide {
-        transform: translateY(-115%);
-    }
-
-    /* 滚动性能：移动端去掉气泡阴影，改用细边框，减少每帧重绘 */
+    /* 去掉气泡阴影，改用细边框，减少每帧重绘 */
     .message.ai .msg-content {
         box-shadow: none;
         border: 1px solid var(--border-light);
     }
 }
+
+/* 字号调节按钮 */
 .font-btn {
     flex-shrink: 0;
     width: 34px;

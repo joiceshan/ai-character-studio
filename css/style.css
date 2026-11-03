@@ -35,7 +35,7 @@
 
 html, body {
     height: 100%;
-    font-family: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'HarmonyOS Sans SC', 'Noto Sans SC', 'Microsoft YaHei', 'Segoe UI', sans-serif;
     background: var(--bg);
     color: var(--text);
     font-size: 15px;
@@ -565,6 +565,10 @@ input, textarea, select {
 .message {
     display: flex;
     gap: 10px;
+}
+
+/* 只有新出现的那一条才播放入场动画，避免整页消息同时动画导致卡顿 */
+.message.msg-in {
     animation: messageIn 0.3s ease;
 }
 
@@ -1966,7 +1970,36 @@ input[type="range"]::-webkit-slider-thumb {
     transform: scale(0.92);
 }
 
-/* 字号调节按钮 */
+/* ========== 移动端：顶部信息栏吸顶（向上翻会带回来） ========== */
+@media (max-width: 640px) {
+    /* 让 body 成为唯一滚动容器，吸顶才会生效 */
+    .tab-content,
+    .chat-layout,
+    .chat-main {
+        overflow: visible;
+    }
+
+    .chat-header-bar {
+        position: sticky;
+        top: env(safe-area-inset-top, 0px);
+        z-index: 130;
+        margin: -12px -12px 12px;   /* 抵消 .tab-content 的 12px 内边距，通栏贴顶 */
+        border-radius: 0;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+        transition: transform 0.25s ease;
+        will-change: transform;
+    }
+
+    .chat-header-bar.hide {
+        transform: translateY(-115%);
+    }
+
+    /* 滚动性能：移动端去掉气泡阴影，改用细边框，减少每帧重绘 */
+    .message.ai .msg-content {
+        box-shadow: none;
+        border: 1px solid var(--border-light);
+    }
+}
 .font-btn {
     flex-shrink: 0;
     width: 34px;

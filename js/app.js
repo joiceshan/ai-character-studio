@@ -208,6 +208,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initChat();
     initWrite();
     initChatFab();
+    initFontSize();
     updateUI();
 });
 
@@ -1270,14 +1271,7 @@ function initChatFab() {
     const container = document.getElementById('chatMessages');
     const topBtn = document.getElementById('fabTopInline');
     const botBtn = document.getElementById('fabBottomInline');
-    const tools = document.getElementById('chatScrollTools');
     if (!container || !topBtn || !botBtn) return;
-
-    const updateVisibility = () => {
-        const { scrollHeight, clientHeight } = container;
-        const needScroll = clientHeight > 0 && (scrollHeight - clientHeight) > 10;
-        if (tools) tools.style.display = needScroll ? 'flex' : 'none';
-    };
 
     topBtn.addEventListener('click', () => {
         container.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1285,16 +1279,65 @@ function initChatFab() {
     botBtn.addEventListener('click', () => {
         container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
     });
+}
 
-    // 容器尺寸变化时重算（切 tab、窗口旋转）
-    if (window.ResizeObserver) {
-        new ResizeObserver(updateVisibility).observe(container);
-    }
+// ---------- 聊天字号调节 ----------
+const FONT_SIZE_OPTIONS = [
+    { label: '小', px: 13 },
+    { label: '标准', px: 15 },
+    { label: '大', px: 17 },
+    { label: '特大', px: 19 },
+    { label: '巨大', px: 22 }
+];
 
-    State.__refreshFab = () => setTimeout(updateVisibility, 350);
+function applyFontSize(px) {
+    document.documentElement.style.setProperty('--chat-font-size', px + 'px');
+    try { localStorage.setItem('ai_font_size', String(px)); } catch (e) {}
+}
 
-    // 初次渲染后
-    setTimeout(updateVisibility, 500);
+function initFontSize() {
+    let saved = parseInt(localStorage.getItem('ai_font_size') || '', 10);
+    if (!Number.isFinite(saved) || saved < 10 || saved > 30) saved = 15;
+    applyFontSize(saved);
+
+    const btn = document.getElementById('fontBtn');
+    if (!btn) return;
+    btn.addEventListener('click', openFontSheet);
+}
+
+function openFontSheet() {
+    const current = parseInt(localStorage.getItem('ai_font_size') || '', 10) || 15;
+
+    const overlay = document.createElement('div');
+    overlay.className = 'sheet-overlay';
+    const sheet = document.createElement('div');
+    sheet.className = 'sheet';
+    sheet.innerHTML = `
+        <div class="sheet-handle"></div>
+        <div class="sheet-title">调整聊天字号</div>
+        <div class="sheet-sub">当前：${current}px</div>
+        ${FONT_SIZE_OPTIONS.map(o => `
+            <button class="sheet-item" data-px="${o.px}">
+                ${o.label}（${o.px}px）${o.px === current ? ' ✓' : ''}
+            </button>`).join('')}
+        <button class="sheet-cancel">取消</button>
+    `;
+
+    document.body.appendChild(overlay);
+    document.body.appendChild(sheet);
+
+    const close = () => { overlay.remove(); sheet.remove(); };
+    overlay.addEventListener('click', close);
+    sheet.querySelector('.sheet-cancel').addEventListener('click', close);
+
+    sheet.querySelectorAll('.sheet-item').forEach(item => {
+        item.addEventListener('click', () => {
+            const px = parseInt(item.dataset.px, 10);
+            applyFontSize(px);
+            showToast(`字号已设为 ${px}px`, 'success');
+            close();
+        });
+    });
 }
 
 function formatMessage(text) {

@@ -709,7 +709,7 @@ input, textarea, select {
     background: var(--bg-card);
     border: 1px solid var(--border);
     border-radius: 24px;
-    padding: 6px 6px 6px 18px;
+    padding: 6px 6px 6px 8px;
     transition: border-color 0.2s;
 }
 
@@ -1966,4 +1966,26 @@ input[type="range"]::-webkit-slider-thumb {
     transform: scale(0.92);
 }
 
-.chat-scroll-tools { display: none; } /* 默认隐藏，JS 控制 */
+/* 字号调节按钮 */
+.font-btn {
+    flex-shrink: 0;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: rgba(102, 126, 234, 0.10);
+    color: #667eea;
+    font-weight: 700;
+    font-size: 13px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 3px;
+    -webkit-tap-highlight-color: transparent;
+}
+.font-btn:active { background: rgba(102, 126, 234, 0.25); }
+
+/* 字号变量应用到消息文本（用 id 选择器压过媒体查询里的固定字号） */
+#chatMessages .msg-content {
+    font-size: var(--chat-font-size, 15px);
+}

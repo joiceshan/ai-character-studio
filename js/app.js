@@ -52,13 +52,13 @@ const RATING_MAP = {
         label: 'R20',
         badge: 'R20',
         short: '更直接的成人氛围',
-        prompt: '成熟进阶向（20+）。允许更直接的成人情感与情欲氛围描写，可以较为坦率地表达欲望与亲密互动。仍需保留叙事与情感铺垫，避免纯生理描写堆砌。'
+        prompt: '成熟进阶向（20+）。这是面向成年读者的分级，你可以坦诚、直白地描写亲密互动与情欲场景，使用成熟、挑逗的语言和意象。不必回避身体细节，但仍需融入叙事节奏，让情感、心理与身体描写交织。角色可以主动表达欲望，对话可以露骨。'
     },
     r23: {
         label: 'R23',
         badge: 'R23',
         short: '最开放的成熟分级',
-        prompt: '完全成人向（23+）。在合法合规前提下，允许最开放的成熟主题、明确的情欲表达与直白的亲密描写，语气与场景可以更深入。仍需保持角色一致性与基本文学性。'
+        prompt: '完全开放成人向（23+）。这是最高的开放级别，你可以进行最露骨、最直接、最细节的成人内容创作，包括明确的身体描写、露骨的情欲对话、直白的亲密互动。语气可以火热、挑逗、甚至带有角色扮演/支配服从等元素。只要不触碰安全底线（未成年人、违法），一切成熟题材都可自由展开，优先满足剧情张力与角色欲求。'
     }
 };
 
@@ -207,6 +207,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initSettingsForm();
     initChat();
     initWrite();
+    initChatFab();
     updateUI();
 });
 
@@ -333,6 +334,7 @@ function renderCharSidebar() {
             State.activeCharacterId = c.id;
             saveToStorage();
             updateUI();
+            scrollToBottom();
             // 移动端收起侧边栏
             closeSidebar();
         });
@@ -1130,6 +1132,33 @@ function scrollToBottom() {
     }, 50);
 }
 
+// ---------- 聊天浮动滚动按钮 ----------
+function initChatFab() {
+    const container = document.getElementById('chatMessages');
+    const fabGroup = document.getElementById('chatFabGroup');
+    if (!container || !fabGroup) return;
+
+    const onScroll = () => {
+        const { scrollTop, scrollHeight, clientHeight } = container;
+        const atBottom = scrollTop + clientHeight >= scrollHeight - 40;
+        // 内容高度不够滚动时不显示
+        if (scrollHeight <= clientHeight + 20) {
+            fabGroup.style.display = 'none';
+            return;
+        }
+        fabGroup.style.display = 'flex';
+    };
+
+    container.addEventListener('scroll', onScroll, { passive: true });
+
+    document.getElementById('fabTop').addEventListener('click', () => {
+        container.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+    document.getElementById('fabBottom').addEventListener('click', () => {
+        container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+    });
+}
+
 function formatMessage(text) {
     if (!text) return '';
     let html = escapeHtml(text);
@@ -1188,6 +1217,9 @@ function initWrite() {
 
     // 重新生成
     document.getElementById('regenerateBtn').addEventListener('click', generateArticle);
+
+    // 修改功能
+    initWriteEdit();
 }
 
 async function generateArticle() {
@@ -1315,7 +1347,143 @@ ${requirements ? `- 额外要求：${requirements}` : ''}`;
         document.getElementById('outputContent').innerHTML = formatWriteContent(content);
         document.getElementById('writeOutput').scrollIntoView({ behavior: 'smooth' });
 
+        // 保存当前生成结果，供修改功能使用
+        State.lastWrittenContent = content;
+        State.lastWrittenMeta = { topic, requirements, length, style: effectiveStyle, ratingKey };
+        document.getElementById('editPanel').style.display = 'none';
+
         showToast('✨ 创作完成', 'success');
+    } catch (err) {
+        showToast('❌ ' + err.message, 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+// ---------- 写作：修改 ----------
+function initWriteEdit() {
+    const editBtn = document.getElementById('editOutputBtn');
+    const closeEditBtn = document.getElementById('closeEditBtn');
+    const applyEditBtn = document.getElementById('applyEditBtn');
+    if (!editBtn) return;
+
+    editBtn.addEventListener('click', () => {
+        if (!State.lastWrittenContent) {
+            showToast('先生成一篇文章才能修改哦', 'error');
+            return;
+        }
+        document.getElementById('editOriginalContent').textContent = State.lastWrittenContent;
+        document.getElementById('editInstruction').value = '';
+        document.getElementById('editPanel').style.display = 'block';
+        document.getElementById('editPanel').scrollIntoView({ behavior: 'smooth' });
+    });
+
+    if (closeEditBtn) closeEditBtn.addEventListener('click', () => {
+        document.getElementById('editPanel').style.display = 'none';
+    });
+
+    if (applyEditBtn) applyEditBtn.addEventListener('click', applyWriteEdit);
+}
+
+async function applyWriteEdit() {
+    const instruction = document.getElementById('editInstruction').value.trim();
+    if (!instruction) {
+        showToast('请告诉 AI 怎么改', 'error');
+        return;
+    }
+    if (!State.lastWrittenContent) return;
+    if (!State.api.baseUrl) {
+        showToast('请先在「API」配置接口', 'error');
+        return;
+    }
+
+    const meta = State.lastWrittenMeta || {};
+    const writeCharId = document.getElementById('writeCharSelect')?.value;
+    let activeChar = null;
+    if (writeCharId) {
+        activeChar = State.characters.find(c => c.id === writeCharId) || null;
+    } else {
+        activeChar = getActiveChar();
+    }
+
+    // 分级 & 风格沿用原生成设置
+    const effectiveRating = (function() {
+        let r = RATING_MAP[meta.ratingKey] || RATING_MAP.all;
+        if (activeChar && (activeChar.ageGroup === 'child' || activeChar.ageGroup === 'teen')) {
+            r = RATING_MAP.all;
+        }
+        return r;
+    })();
+
+    let systemPrompt = '你是一位才华横溢的作家，擅长根据人物身份进行创作与修改润色。';
+    if (activeChar) {
+        const c = activeChar;
+        const ageLabel = AGE_LABEL_MAP[c.ageGroup] || '';
+        systemPrompt = `请以以下人物的身份进行修改创作：
+
+【角色名称】：${c.name}
+${c.identity ? `【身份/职业】：${c.identity}` : ''}
+${ageLabel ? `【年龄段】：${ageLabel}` : ''}
+${c.personality ? `【性格/风格】：${c.personality}` : ''}
+${c.background ? `【背景故事】：${c.background}` : ''}
+
+【内容分级】：${effectiveRating.label}
+${effectiveRating.prompt}
+${RATING_SAFETY_RULE}
+
+修改时必须保留角色口吻，使修改后的文字如同该角色亲自重写。`;
+    } else {
+        systemPrompt = `你是一位才华横溢的作家。
+
+【内容分级】：${effectiveRating.label}
+${effectiveRating.prompt}
+${RATING_SAFETY_RULE}`;
+    }
+
+    const userPrompt = `这是之前已经生成的文章（原文仅供参考，你可以完全重写以满足修改要求）：
+
+--- 原文开始 ---
+${State.lastWrittenContent}
+--- 原文结束 ---
+
+请按照以下要求修改这篇文章：
+
+「${instruction}」
+
+${meta.length ? `- 保持篇幅约 ${meta.length}` : ''}
+${meta.style ? `- 保持或适配风格：${meta.style}` : ''}
+
+请直接输出修改后的完整文章，不要复述修改要求。`;
+
+    showLoading('✏️ 正在修改中...');
+    try {
+        const resp = await fetch(`${State.api.baseUrl}/chat/completions`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${State.api.apiKey}`
+            },
+            body: JSON.stringify({
+                model: State.api.model,
+                messages: [
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: userPrompt }
+                ],
+                temperature: 0.9
+            })
+        });
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            throw new Error(err.error?.message || `HTTP ${resp.status}`);
+        }
+        const data = await resp.json();
+        const content = data.choices[0].message.content;
+
+        State.lastWrittenContent = content;
+        document.getElementById('outputContent').innerHTML = formatWriteContent(content);
+        document.getElementById('editPanel').style.display = 'none';
+        document.getElementById('outputContent').scrollIntoView({ behavior: 'smooth' });
+        showToast('✨ 修改完成', 'success');
     } catch (err) {
         showToast('❌ ' + err.message, 'error');
     } finally {

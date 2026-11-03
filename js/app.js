@@ -250,8 +250,6 @@ function updateCharacterPreview() {
     const miniAvatar = document.getElementById('miniAvatar');
     const miniName = document.getElementById('miniName');
     const miniStatus = document.getElementById('miniStatus');
-    const quickPrompts = document.getElementById('quickPrompts');
-
     const c = getActiveChar();
     if (c) {
         if (miniAvatar) renderCharacterAvatar(miniAvatar, c);
@@ -270,14 +268,12 @@ function updateCharacterPreview() {
             chip.textContent = `${rating.badge} ▾`;
             chip.classList.toggle('restricted', c.ageGroup === 'child' || c.ageGroup === 'teen');
         }
-        if (quickPrompts) quickPrompts.style.display = 'flex';
     } else {
         if (miniAvatar) miniAvatar.textContent = '🤖';
         if (miniName) miniName.textContent = '未选择角色';
         if (miniStatus) miniStatus.textContent = '点击左侧列表选择一个角色';
         const chip = document.getElementById('ratingChip');
         if (chip) chip.style.display = 'none';
-        if (quickPrompts) quickPrompts.style.display = 'none';
     }
 }
 
@@ -996,14 +992,7 @@ function initChat() {
         });
     }
 
-    // 快捷提示
-    document.getElementById('quickPrompts').addEventListener('click', (e) => {
-        if (e.target.classList.contains('quick-prompt')) {
-            input.value = e.target.textContent;
-            input.focus();
-        }
-    });
-}
+    // 快捷提示}
 
 // ---------- 删除对话：底部抽屉（动态挂到 body，避免被父级布局裁切） ----------
 function openClearSheet() {

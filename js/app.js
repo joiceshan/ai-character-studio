@@ -250,6 +250,7 @@ function updateCharacterPreview() {
     const miniAvatar = document.getElementById('miniAvatar');
     const miniName = document.getElementById('miniName');
     const miniStatus = document.getElementById('miniStatus');
+
     const c = getActiveChar();
     if (c) {
         if (miniAvatar) renderCharacterAvatar(miniAvatar, c);
@@ -991,8 +992,7 @@ function initChat() {
             openClearSheet();
         });
     }
-
-    // 快捷提示}
+}
 
 // ---------- 删除对话：底部抽屉（动态挂到 body，避免被父级布局裁切） ----------
 function openClearSheet() {

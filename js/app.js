@@ -531,6 +531,21 @@ function initCharacterForm() {
         showToast('✨ 人物已保存', 'success');
     });
 
+    // 清除该角色对话记忆（只清空对话，保留人物设定）
+    document.getElementById('clearMemoryBtn').addEventListener('click', () => {
+        const c = getActiveChar();
+        if (!c) { showToast('请先选择角色', 'error'); return; }
+        const id = c.id;
+        const msgs = State.conversations[id] || [];
+        if (msgs.length === 0) { showToast('该角色没有对话记忆', 'error'); return; }
+        if (confirm(`确定清除「${c.name}」的全部对话记忆？\n（人物设定会保留，下次对话从 0 开始）`)) {
+            State.conversations[id] = [];
+            saveToStorage();
+            updateUI();
+            showToast('对话记忆已清除', 'success');
+        }
+    });
+
     // 预设按钮
     document.getElementById('loadPresetBtn').addEventListener('click', openPresetModal);
     document.getElementById('closePresetBtn').addEventListener('click', () => {
@@ -965,24 +980,81 @@ function initChat() {
     sendBtn.addEventListener('click', sendMessage);
 
     // 清空当前对话（只清当前角色）
-    document.getElementById('clearChatBtn').addEventListener('click', () => {
-        const id = State.activeCharacterId;
-        if (!id) {
-            showToast('请先选择角色', 'error');
-            return;
-        }
-        const msgs = State.conversations[id] || [];
-        if (msgs.length === 0) {
-            showToast('对话已经是空的', 'error');
-            return;
-        }
-        if (confirm('确定清空与当前角色的对话吗？')) {
-            State.conversations[id] = [];
-            saveToStorage();
-            renderMessages();
-            showToast('对话已清空', 'success');
-        }
-    });
+    // 清空 / 删除对话（弹出多选菜单）
+    const clearBtn = document.getElementById('clearChatBtn');
+    const clearMenu = document.getElementById('clearMenu');
+    if (clearBtn && clearMenu) {
+        clearBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const c = getActiveChar();
+            const msgs = getActiveMessages();
+            if (!c) { showToast('请先选择角色', 'error'); return; }
+            if (msgs.length === 0) { showToast('对话已经是空的', 'error'); return; }
+            clearMenu.style.display = clearMenu.style.display === 'none' ? 'block' : 'none';
+        });
+        document.addEventListener('click', (e) => {
+            if (!clearMenu.contains(e.target) && e.target !== clearBtn) {
+                clearMenu.style.display = 'none';
+            }
+        });
+        clearMenu.querySelectorAll('.clear-menu-item').forEach(item => {
+            item.addEventListener('click', () => {
+                const action = item.dataset.action;
+                const c = getActiveChar();
+                const id = State.activeCharacterId;
+                if (!c || !id) return;
+                const msgs = State.conversations[id] || [];
+                let confirmMsg = '';
+                let modified = false;
+
+                switch (action) {
+                    case 'all':
+                        confirmMsg = `确定清空与「${c.name}」的全部对话？`;
+                        if (confirm(confirmMsg)) {
+                            State.conversations[id] = [];
+                            modified = true;
+                            showToast('对话已清空', 'success');
+                        }
+                        break;
+                    case 'last5':
+                    case 'last10': {
+                        const n = action === 'last5' ? 5 : 10;
+                        const actual = Math.min(n, msgs.length);
+                        confirmMsg = `确定删除「${c.name}」的最后 ${actual} 条对话？`;
+                        if (confirm(confirmMsg)) {
+                            State.conversations[id].splice(msgs.length - actual, actual);
+                            modified = true;
+                            showToast(`已删除最后 ${actual} 条`, 'success');
+                        }
+                        break;
+                    }
+                    case 'onlyAi':
+                        confirmMsg = `确定删除「${c.name}」的所有 AI 回复，保留你的消息？`;
+                        if (confirm(confirmMsg)) {
+                            State.conversations[id] = msgs.filter(m => m.role !== 'assistant');
+                            modified = true;
+                            showToast('AI 回复已清除', 'success');
+                        }
+                        break;
+                    case 'onlyUser':
+                        confirmMsg = `确定删除「${c.name}」的所有你发的消息，保留 AI 回复？`;
+                        if (confirm(confirmMsg)) {
+                            State.conversations[id] = msgs.filter(m => m.role !== 'user');
+                            modified = true;
+                            showToast('你的消息已清除', 'success');
+                        }
+                        break;
+                }
+
+                if (modified) {
+                    saveToStorage();
+                    renderMessages();
+                    scrollToBottom();
+                }
+                clearMenu.style.display = 'none';
+            });
+        });
+    }
 
     // 快捷提示
     document.getElementById('quickPrompts').addEventListener('click', (e) => {
@@ -1068,7 +1140,7 @@ function addTypingIndicator() {
     return div;
 }
 
-function createMessageDiv(role, content) {
+function createMessageDiv(role, content, index, onDelete) {
     const div = document.createElement('div');
     if (role === 'error') {
         div.className = 'msg-error';
@@ -1088,6 +1160,28 @@ function createMessageDiv(role, content) {
     contentEl.innerHTML = formatMessage(content);
     div.appendChild(avatarEl);
     div.appendChild(contentEl);
+
+    // 单条消息删除：长按（手机）/ 右键（桌面）/ 显示小叉
+    let longPressTimer = null;
+    const showDelete = () => {
+        if (typeof index !== 'number' || !onDelete) return;
+        if (confirm('删除这条消息？\n（删除后 AI 上下文也会变化，建议只删最后一条）')) {
+            onDelete(index);
+        }
+    };
+    div.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        showDelete();
+    });
+    div.addEventListener('touchstart', () => {
+        longPressTimer = setTimeout(showDelete, 650);
+    });
+    ['touchend', 'touchmove', 'touchcancel'].forEach(ev => {
+        div.addEventListener(ev, () => {
+            if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+        });
+    });
+
     return div;
 }
 
@@ -1108,16 +1202,26 @@ function renderMessages() {
         return;
     }
 
+    // 删除单条消息的回调
+    const deleteAtIndex = (i) => {
+        const id = State.activeCharacterId;
+        if (!id) return;
+        State.conversations[id].splice(i, 1);
+        saveToStorage();
+        renderMessages();
+        scrollToBottom();
+    };
+
     if (msgs.length === 0) {
         // 显示欢迎语
         if (c.greeting) {
-            container.appendChild(createMessageDiv('assistant', c.greeting));
+            container.appendChild(createMessageDiv('assistant', c.greeting, null, null));
         }
         return;
     }
 
-    msgs.forEach(msg => {
-        container.appendChild(createMessageDiv(msg.role, msg.content));
+    msgs.forEach((msg, i) => {
+        container.appendChild(createMessageDiv(msg.role, msg.content, i, deleteAtIndex));
     });
 }
 

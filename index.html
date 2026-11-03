@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#667eea">
     <title>AI 人物工坊 · Character Studio</title>
-    <link rel="stylesheet" href="css/style.css?v=15">
+    <link rel="stylesheet" href="css/style.css?v=16">
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
 </head>
 <body>
@@ -67,7 +67,19 @@
                             </div>
                         </div>
                         <button class="rating-chip" id="ratingChip" title="切换内容分级" style="display:none;">G ▾</button>
-                        <button class="btn-icon" id="clearChatBtn" title="清空当前对话">🗑️</button>
+                        <div class="clear-menu-wrap">
+                            <button class="btn-icon" id="clearChatBtn" title="删除对话内容">🗑️</button>
+                            <div class="clear-menu" id="clearMenu" style="display:none;">
+                                <div class="clear-menu-title">删除对话</div>
+                                <button class="clear-menu-item" data-action="all">🗑️ 清空全部对话（保留角色）</button>
+                                <button class="clear-menu-item" data-action="last5">⬅️ 删除最后 5 条</button>
+                                <button class="clear-menu-item" data-action="last10">⬅️ 删除最后 10 条</button>
+                                <button class="clear-menu-item" data-action="onlyAi">🤖 只删除 AI 回复</button>
+                                <button class="clear-menu-item" data-action="onlyUser">🙂 只删除我的消息</button>
+                                <div class="clear-menu-divider"></div>
+                                <div class="clear-menu-hint">💡 长按 / 右键单条消息可单独删除</div>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="chat-messages" id="chatMessages">
@@ -285,7 +297,10 @@
                     <input type="text" id="charGreeting" placeholder="TA 跟你打招呼的第一句话&#10;可包含 *动作描写*，例如：*微微歪头* 你好呀" />
                 </div>
 
-                <button class="btn-primary btn-large" id="saveCharBtn">💾 保存人物设定</button>
+                <div class="char-form-actions">
+                    <button class="btn-primary btn-large" id="saveCharBtn">💾 保存人物设定</button>
+                    <button class="btn-danger-outline btn-large" id="clearMemoryBtn" title="只清除对话，保留人物设定">🗑️ 清除该角色对话记忆</button>
+                </div>
             </div>
 
             <!-- 预设角色弹窗 -->
@@ -390,6 +405,6 @@
     <!-- Toast 提示 -->
     <div class="toast" id="toast"></div>
 
-    <script src="js/app.js?v=15"></script>
+    <script src="js/app.js?v=16"></script>
 </body>
 </html>

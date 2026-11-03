@@ -1242,18 +1242,13 @@ function initChatFab() {
     const fabGroup = document.getElementById('chatFabGroup');
     if (!container || !fabGroup) return;
 
-    const onScroll = () => {
-        const { scrollTop, scrollHeight, clientHeight } = container;
-        const atBottom = scrollTop + clientHeight >= scrollHeight - 40;
+    const updateVisibility = () => {
+        const { scrollHeight, clientHeight } = container;
         // 内容高度不够滚动时不显示
-        if (scrollHeight <= clientHeight + 20) {
-            fabGroup.style.display = 'none';
-            return;
-        }
-        fabGroup.style.display = 'flex';
+        fabGroup.style.display = (scrollHeight <= clientHeight + 20) ? 'none' : 'flex';
     };
 
-    container.addEventListener('scroll', onScroll, { passive: true });
+    container.addEventListener('scroll', updateVisibility, { passive: true });
 
     document.getElementById('fabTop').addEventListener('click', () => {
         container.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1261,6 +1256,26 @@ function initChatFab() {
     document.getElementById('fabBottom').addEventListener('click', () => {
         container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
     });
+
+    // 键盘弹起时调整浮动按钮位置（iOS Safari & Android Chrome）
+    const vv = window.visualViewport;
+    if (vv) {
+        const onViewport = () => {
+            // 键盘弹起时 viewport.height < window.innerHeight
+            const diff = window.innerHeight - vv.height;
+            if (diff > 60) {
+                // 键盘弹起 → 浮动按钮往上移
+                fabGroup.style.bottom = (96 + diff) + 'px';
+            } else {
+                fabGroup.style.bottom = ''; // 回到 CSS 默认
+            }
+        };
+        vv.addEventListener('resize', onViewport);
+        vv.addEventListener('scroll', onViewport);
+    }
+
+    // 初次渲染后也检查一次
+    setTimeout(updateVisibility, 300);
 }
 
 function formatMessage(text) {

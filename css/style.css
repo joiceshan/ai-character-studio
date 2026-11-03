@@ -1548,6 +1548,7 @@ input[type="range"]::-webkit-slider-thumb {
     font-weight: bold;
     cursor: pointer;
     transition: transform 0.15s;
+    -webkit-tap-highlight-color: transparent;
 }
 .chat-fab:active { transform: scale(0.92); }
 .chat-fab:hover { box-shadow: 0 3px 14px rgba(102,126,234,0.4); }
@@ -1707,4 +1708,111 @@ input[type="range"]::-webkit-slider-thumb {
     background: rgba(0,0,0,0.05);
     padding: 2px 6px;
     border-radius: 4px;
+}
+
+/* ========== 移动端整体优化 ========== */
+@media (max-width: 640px) {
+    /* 浮动按钮改为 fixed，固定在屏幕右下角 */
+    .chat-fab-group {
+        position: fixed;
+        right: 16px;
+        bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+        z-index: 250;
+        gap: 10px;
+    }
+    .chat-fab {
+        width: 44px;
+        height: 44px;
+        font-size: 18px;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+    }
+
+    /* 输入区避开刘海屏底部 */
+    .chat-input-area {
+        padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)) !important;
+        padding-left: 10px;
+        padding-right: 10px;
+    }
+    .chat-messages {
+        padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)) !important;
+    }
+
+    /* 消息气泡调整 */
+    .message {
+        gap: 8px;
+        margin: 8px 0;
+    }
+    .msg-content {
+        padding: 10px 14px;
+        font-size: 15px;
+        line-height: 1.65;
+    }
+    .msg-avatar {
+        width: 34px;
+        height: 34px;
+        font-size: 18px;
+        flex-shrink: 0;
+    }
+
+    /* 隐藏消息气泡 hover 提示（移动端没有 hover） */
+    .message:hover::after { display: none; }
+
+    /* 清空菜单在移动端 */
+    .clear-menu {
+        position: fixed;
+        top: auto;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        min-width: auto;
+        border-radius: 16px 16px 0 0;
+        padding: 12px 8px calc(16px + env(safe-area-inset-bottom, 0px));
+        animation: slideUp 0.22s ease;
+        box-shadow: 0 -8px 28px rgba(0,0,0,0.22);
+    }
+    .clear-menu-title { font-size: 13px; padding: 6px 14px 8px; }
+    .clear-menu-item {
+        padding: 14px 16px;
+        font-size: 15px;
+        border-radius: 10px;
+        margin: 2px 0;
+    }
+
+    /* 顶部栏按钮间距 */
+    .rating-chip { font-size: 12px; padding: 4px 10px; }
+
+    /* 写作输出区和修改面板 */
+    .edit-panel { padding: 14px; border-radius: 12px; }
+    .edit-original-preview { max-height: 90px; }
+
+    /* 设定页按钮 */
+    .char-form-actions { gap: 12px; }
+    .btn-danger-outline { font-size: 14px; padding: 14px; }
+
+    /* 写作页下拉框更友好 */
+    select, #writeTopic, #writeRequirements, #charName, #charIdentity, #charPersonality, #charBackground, #charGreeting {
+        font-size: 16px; /* iOS 自动放大 bug */
+    }
+
+    /* 写作输出内容 */
+    .output-content { font-size: 15px; line-height: 1.7; }
+}
+
+/* 底部弹出菜单动画 */
+@keyframes slideUp {
+    from { transform: translateY(100%); opacity: 0.4; }
+    to   { transform: translateY(0); opacity: 1; }
+}
+
+/* iPhone 小屏 (SE/mini) 特殊处理 */
+@media (max-width: 380px) {
+    .chat-fab-group { right: 12px; bottom: calc(92px + env(safe-area-inset-bottom, 0px)); }
+    .chat-fab { width: 40px; height: 40px; font-size: 16px; }
+    .msg-content { font-size: 14px; padding: 9px 12px; }
+}
+
+/* 键盘弹起时浮动按钮收起（适配 Android WebView） */
+@media (max-height: 540px) {
+    .chat-fab-group { bottom: calc(72px + env(safe-area-inset-bottom, 0px)); gap: 6px; }
+    .chat-fab { width: 36px; height: 36px; font-size: 14px; }
 }

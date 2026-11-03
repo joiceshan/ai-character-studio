@@ -226,6 +226,12 @@ function initTabs() {
             if (window.innerWidth <= 640) {
                 document.getElementById('tab-' + tabId).scrollTop = 0;
             }
+
+            // tab 切换后重新检测浮动滚动按钮是否该显示
+            if (State.__refreshFab) {
+                State.__refreshFab();
+                setTimeout(State.__refreshFab, 400);
+            }
         });
     });
 }
@@ -1277,10 +1283,17 @@ function initChatFab() {
 
     const updateVisibility = () => {
         const { scrollHeight, clientHeight } = container;
-        fabGroup.style.display = (scrollHeight <= clientHeight + 20) ? 'none' : 'flex';
+        // 容器不可见（高为 0）或不需要滚动时隐藏
+        const needScroll = clientHeight > 0 && (scrollHeight - clientHeight) > 10;
+        fabGroup.style.display = needScroll ? 'flex' : 'none';
     };
 
     container.addEventListener('scroll', updateVisibility, { passive: true });
+
+    // 容器尺寸/可见性变化时（切 tab、键盘弹起、窗口旋转）自动重算
+    if (window.ResizeObserver) {
+        new ResizeObserver(updateVisibility).observe(container);
+    }
 
     fabGroup.querySelector('#fabTop').addEventListener('click', () => {
         container.scrollTo({ top: 0, behavior: 'smooth' });

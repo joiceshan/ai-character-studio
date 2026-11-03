@@ -1264,20 +1264,29 @@ function scrollToBottom() {
 }
 
 // ---------- 聊天滚动按钮（回到顶部 / 滚到底部） ----------
-// 注意：桌面端滚动的是 #chatMessages，移动端整个页面滚动（#chatMessages 不滚），
-// 所以要按实际情况判断真正能滚的那个容器。
+// 各端真正能滚的容器不一样（桌面是 #chatMessages，手机可能是 body 或 html），
+// 所以把消息框及其整条祖先链上所有「可滚动」的元素都滚一遍，最稳妥。
 function scrollChatTo(where) {
-    const el = document.getElementById('chatMessages');
-    const doc = document.scrollingElement || document.documentElement || document.body;
-    const elScrollable = el && (el.scrollHeight - el.clientHeight) > 4;
-
-    if (elScrollable) {
-        el.scrollTop = where === 'top' ? 0 : el.scrollHeight;
-        return;
+    const list = document.getElementById('chatMessages');
+    const candidates = [];
+    if (list) {
+        candidates.push(list);
+        let p = list.parentElement;
+        while (p) {
+            candidates.push(p);
+            p = p.parentElement;
+        }
     }
-    const target = where === 'top' ? 0 : doc.scrollHeight;
-    window.scrollTo(0, target);
-    doc.scrollTop = target;
+    candidates.push(document.body, document.documentElement);
+
+    candidates.forEach(el => {
+        if (!el) return;
+        const max = el.scrollHeight - el.clientHeight;
+        if (max > 4) el.scrollTop = where === 'top' ? 0 : max;
+    });
+
+    if (where === 'top') window.scrollTo(0, 0);
+    else window.scrollTo(0, Math.max(document.body.scrollHeight, document.documentElement.scrollHeight));
 }
 
 function initChatFab() {

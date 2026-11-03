@@ -1260,24 +1260,41 @@ function restoreMessages() {
 }
 
 function scrollToBottom() {
-    const container = document.getElementById('chatMessages');
-    setTimeout(() => {
-        container.scrollTop = container.scrollHeight;
-    }, 50);
+    setTimeout(() => scrollChatTo('bottom'), 50);
 }
 
-// ---------- 聊天浮动滚动按钮 ----------
-function initChatFab() {
-    const container = document.getElementById('chatMessages');
-    const topBtn = document.getElementById('fabTopInline');
-    const botBtn = document.getElementById('fabBottomInline');
-    if (!container || !topBtn || !botBtn) return;
+// ---------- 聊天滚动按钮（回到顶部 / 滚到底部） ----------
+// 注意：桌面端滚动的是 #chatMessages，移动端整个页面滚动（#chatMessages 不滚），
+// 所以要按实际情况判断真正能滚的那个容器。
+function scrollChatTo(where) {
+    const el = document.getElementById('chatMessages');
+    const doc = document.scrollingElement || document.documentElement || document.body;
+    const elScrollable = el && (el.scrollHeight - el.clientHeight) > 4;
 
-    topBtn.addEventListener('click', () => {
-        container.scrollTo({ top: 0, behavior: 'smooth' });
-    });
-    botBtn.addEventListener('click', () => {
-        container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+    if (elScrollable) {
+        el.scrollTop = where === 'top' ? 0 : el.scrollHeight;
+        return;
+    }
+    const target = where === 'top' ? 0 : doc.scrollHeight;
+    window.scrollTo(0, target);
+    doc.scrollTop = target;
+}
+
+function initChatFab() {
+    if (State.__scrollBound) return;
+    State.__scrollBound = true;
+
+    // 事件委托：即使某个初始化步骤出错，点击也不会失效
+    document.addEventListener('click', (e) => {
+        const target = e.target;
+        if (!target || !target.closest) return;
+        const isTop = target.closest('#fabTopInline');
+        const isBottom = target.closest('#fabBottomInline');
+        if (!isTop && !isBottom) return;
+
+        e.preventDefault();
+        scrollChatTo(isTop ? 'top' : 'bottom');
+        showToast(isTop ? '已回到顶部' : '已滚到最新');
     });
 }
 

@@ -982,77 +982,10 @@ function initChat() {
     // 清空当前对话（只清当前角色）
     // 清空 / 删除对话（弹出多选菜单）
     const clearBtn = document.getElementById('clearChatBtn');
-    const clearMenu = document.getElementById('clearMenu');
-    if (clearBtn && clearMenu) {
+    if (clearBtn) {
         clearBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            const c = getActiveChar();
-            const msgs = getActiveMessages();
-            if (!c) { showToast('请先选择角色', 'error'); return; }
-            if (msgs.length === 0) { showToast('对话已经是空的', 'error'); return; }
-            clearMenu.style.display = clearMenu.style.display === 'none' ? 'block' : 'none';
-        });
-        document.addEventListener('click', (e) => {
-            if (!clearMenu.contains(e.target) && e.target !== clearBtn) {
-                clearMenu.style.display = 'none';
-            }
-        });
-        clearMenu.querySelectorAll('.clear-menu-item').forEach(item => {
-            item.addEventListener('click', () => {
-                const action = item.dataset.action;
-                const c = getActiveChar();
-                const id = State.activeCharacterId;
-                if (!c || !id) return;
-                const msgs = State.conversations[id] || [];
-                let confirmMsg = '';
-                let modified = false;
-
-                switch (action) {
-                    case 'all':
-                        confirmMsg = `确定清空与「${c.name}」的全部对话？`;
-                        if (confirm(confirmMsg)) {
-                            State.conversations[id] = [];
-                            modified = true;
-                            showToast('对话已清空', 'success');
-                        }
-                        break;
-                    case 'last5':
-                    case 'last10': {
-                        const n = action === 'last5' ? 5 : 10;
-                        const actual = Math.min(n, msgs.length);
-                        confirmMsg = `确定删除「${c.name}」的最后 ${actual} 条对话？`;
-                        if (confirm(confirmMsg)) {
-                            State.conversations[id].splice(msgs.length - actual, actual);
-                            modified = true;
-                            showToast(`已删除最后 ${actual} 条`, 'success');
-                        }
-                        break;
-                    }
-                    case 'onlyAi':
-                        confirmMsg = `确定删除「${c.name}」的所有 AI 回复，保留你的消息？`;
-                        if (confirm(confirmMsg)) {
-                            State.conversations[id] = msgs.filter(m => m.role !== 'assistant');
-                            modified = true;
-                            showToast('AI 回复已清除', 'success');
-                        }
-                        break;
-                    case 'onlyUser':
-                        confirmMsg = `确定删除「${c.name}」的所有你发的消息，保留 AI 回复？`;
-                        if (confirm(confirmMsg)) {
-                            State.conversations[id] = msgs.filter(m => m.role !== 'user');
-                            modified = true;
-                            showToast('你的消息已清除', 'success');
-                        }
-                        break;
-                }
-
-                if (modified) {
-                    saveToStorage();
-                    renderMessages();
-                    scrollToBottom();
-                }
-                clearMenu.style.display = 'none';
-            });
+            openClearSheet();
         });
     }
 
@@ -1062,6 +995,91 @@ function initChat() {
             input.value = e.target.textContent;
             input.focus();
         }
+    });
+}
+
+// ---------- 删除对话：底部抽屉（动态挂到 body，避免被父级布局裁切） ----------
+function openClearSheet() {
+    const c = getActiveChar();
+    if (!c) { showToast('请先选择角色', 'error'); return; }
+    const id = State.activeCharacterId;
+    const msgs = State.conversations[id] || [];
+    if (msgs.length === 0) { showToast('对话已经是空的', 'error'); return; }
+
+    const overlay = document.createElement('div');
+    overlay.className = 'sheet-overlay';
+    overlay.id = 'clearSheetOverlay';
+
+    const sheet = document.createElement('div');
+    sheet.className = 'sheet';
+    sheet.innerHTML = `
+        <div class="sheet-handle"></div>
+        <div class="sheet-title">删除「${escapeHtml(c.name)}」的对话</div>
+        <div class="sheet-sub">当前共 ${msgs.length} 条消息</div>
+        <button class="sheet-item" data-action="all">🗑️ 清空全部对话（保留角色）</button>
+        <button class="sheet-item" data-action="last5">⬅️ 删除最后 5 条</button>
+        <button class="sheet-item" data-action="last10">⬅️ 删除最后 10 条</button>
+        <button class="sheet-item" data-action="onlyAi">🤖 只删除 AI 的回复</button>
+        <button class="sheet-item" data-action="onlyUser">🙂 只删除我发的消息</button>
+        <div class="sheet-tip">💡 每条消息头像下方有 ✕ 可单独删除</div>
+        <button class="sheet-cancel">取消</button>
+    `;
+
+    document.body.appendChild(overlay);
+    document.body.appendChild(sheet);
+
+    const close = () => {
+        overlay.remove();
+        sheet.remove();
+        document.removeEventListener('keydown', onKey);
+    };
+    const onKey = (ev) => { if (ev.key === 'Escape') close(); };
+    document.addEventListener('keydown', onKey);
+
+    overlay.addEventListener('click', close);
+    sheet.querySelector('.sheet-cancel').addEventListener('click', close);
+
+    sheet.querySelectorAll('.sheet-item').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const action = btn.dataset.action;
+            const cur = State.conversations[id] || [];
+            let modified = false;
+
+            if (action === 'all') {
+                if (confirm(`确定清空与「${c.name}」的全部对话？`)) {
+                    State.conversations[id] = [];
+                    modified = true;
+                    showToast('对话已清空', 'success');
+                }
+            } else if (action === 'last5' || action === 'last10') {
+                const n = action === 'last5' ? 5 : 10;
+                const actual = Math.min(n, cur.length);
+                if (confirm(`确定删除最后 ${actual} 条对话？`)) {
+                    State.conversations[id].splice(cur.length - actual, actual);
+                    modified = true;
+                    showToast(`已删除最后 ${actual} 条`, 'success');
+                }
+            } else if (action === 'onlyAi') {
+                if (confirm('确定删除所有 AI 回复，保留你的消息？')) {
+                    State.conversations[id] = cur.filter(m => m.role !== 'assistant');
+                    modified = true;
+                    showToast('AI 回复已清除', 'success');
+                }
+            } else if (action === 'onlyUser') {
+                if (confirm('确定删除你发的所有消息，保留 AI 回复？')) {
+                    State.conversations[id] = cur.filter(m => m.role !== 'user');
+                    modified = true;
+                    showToast('你的消息已清除', 'success');
+                }
+            }
+
+            if (modified) {
+                saveToStorage();
+                renderMessages();
+                scrollToBottom();
+                close();
+            }
+        });
     });
 }
 
@@ -1148,6 +1166,11 @@ function createMessageDiv(role, content, index, onDelete) {
         return div;
     }
     div.className = 'message ' + (role === 'user' ? 'user' : 'ai');
+
+    // 头像列：头像 + 下方删除按钮
+    const avatarCol = document.createElement('div');
+    avatarCol.className = 'msg-avatar-col';
+
     const avatarEl = document.createElement('div');
     avatarEl.className = 'msg-avatar';
     if (role === 'user') {
@@ -1155,32 +1178,29 @@ function createMessageDiv(role, content, index, onDelete) {
     } else {
         renderCharacterAvatar(avatarEl, getActiveChar());
     }
+    avatarCol.appendChild(avatarEl);
+
+    if (typeof index === 'number' && onDelete) {
+        const delBtn = document.createElement('button');
+        delBtn.className = 'msg-del-btn';
+        delBtn.type = 'button';
+        delBtn.title = '删除这条消息';
+        delBtn.setAttribute('aria-label', '删除这条消息');
+        delBtn.textContent = '✕';
+        delBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (confirm('删除这条消息？\n（删除后 AI 的上下文也会变化）')) {
+                onDelete(index);
+            }
+        });
+        avatarCol.appendChild(delBtn);
+    }
+
     const contentEl = document.createElement('div');
     contentEl.className = 'msg-content';
     contentEl.innerHTML = formatMessage(content);
-    div.appendChild(avatarEl);
+    div.appendChild(avatarCol);
     div.appendChild(contentEl);
-
-    // 单条消息删除：长按（手机）/ 右键（桌面）/ 显示小叉
-    let longPressTimer = null;
-    const showDelete = () => {
-        if (typeof index !== 'number' || !onDelete) return;
-        if (confirm('删除这条消息？\n（删除后 AI 上下文也会变化，建议只删最后一条）')) {
-            onDelete(index);
-        }
-    };
-    div.addEventListener('contextmenu', (e) => {
-        e.preventDefault();
-        showDelete();
-    });
-    div.addEventListener('touchstart', () => {
-        longPressTimer = setTimeout(showDelete, 650);
-    });
-    ['touchend', 'touchmove', 'touchcancel'].forEach(ev => {
-        div.addEventListener(ev, () => {
-            if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
-        });
-    });
 
     return div;
 }

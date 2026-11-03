@@ -1454,7 +1454,8 @@ input[type="range"]::-webkit-slider-thumb {
     }
 
     .msg-content {
-        max-width: 85%;
+        max-width: calc(100% - 46px); /* 留出头像列 + 间距，避免整行横向溢出 */
+        min-width: 0;
     }
 
     .chat-input-area {
@@ -1989,12 +1990,65 @@ input[type="range"]::-webkit-slider-thumb {
     transform: scale(0.92);
 }
 
-/* ========== 移动端：滚动性能 ========== */
+/* ========== 移动端：滚动性能 + 紧凑排版 ========== */
 @media (max-width: 640px) {
     /* 去掉气泡阴影，改用细边框，减少每帧重绘 */
     .message.ai .msg-content {
         box-shadow: none;
         border: 1px solid var(--border-light);
+    }
+
+    /* 消息区禁止横向溢出（否则整行会被推歪） */
+    .chat-messages {
+        overflow-x: hidden;
+        gap: 12px;
+    }
+    .message {
+        width: 100%;
+        min-width: 0;
+        margin: 0 !important;
+    }
+
+    /* 顶部信息栏收紧，保证窄屏也能放下全部按钮 */
+    .chat-header-bar {
+        padding: 8px 10px;
+        gap: 6px;
+        overflow: hidden;
+    }
+    .sidebar-toggle,
+    #clearChatBtn {
+        width: 30px;
+        height: 30px;
+        font-size: 15px;
+        flex-shrink: 0;
+    }
+    .character-mini {
+        gap: 8px;
+    }
+    .mini-avatar {
+        width: 32px;
+        height: 32px;
+        font-size: 16px;
+    }
+    .mini-name {
+        font-size: 15px;
+    }
+    .mini-status {
+        font-size: 11px;
+    }
+    .rating-chip {
+        padding: 3px 8px;
+        font-size: 11px;
+        flex-shrink: 0;
+    }
+    .chat-scroll-tools {
+        gap: 3px;
+        flex-shrink: 0;
+    }
+    .chat-scroll-tools .btn-icon-sm {
+        width: 26px !important;
+        height: 26px !important;
+        font-size: 12px !important;
     }
 }
 

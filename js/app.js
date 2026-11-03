@@ -260,7 +260,7 @@ function updateCharacterPreview() {
         const rating = resolveRating(c);
         const parts = [c.identity, ageLabel].filter(Boolean);
         if (miniStatus) {
-            miniStatus.textContent = (parts.join(' · ') || '已就绪，开始对话吧') + `  ·  ${rating.label}`;
+            miniStatus.textContent = (parts.join(' · ') || '已就绪，开始对话吧');
         }
 
         // 聊天页分级快捷按钮
@@ -1248,6 +1248,8 @@ function renderMessages() {
     }
 
     msgs.forEach((msg, i) => {
+        // 跳过空消息（历史上失败的请求会留下空壳，渲染出来就是一大块空白）
+        if (!msg || !msg.content || !String(msg.content).trim()) return;
         container.appendChild(createMessageDiv(msg.role, msg.content, i, deleteAtIndex));
     });
 

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#667eea">
     <title>AI 人物工坊 · Character Studio</title>
-    <link rel="stylesheet" href="css/style.css?v=28">
+    <link rel="stylesheet" href="css/style.css?v=29">
 </head>
 <body>
     <!-- 顶部导航 -->
@@ -82,6 +82,9 @@
                     </div>
 
                     <div class="chat-input-area">
+                        <button class="continue-btn" id="continueChatBtn" title="AI 帮你继续这场对话" aria-label="继续这场对话">
+                            ✨ 不知道聊什么？让 TA 继续
+                        </button>
                         <div class="input-row">
                             <button class="font-btn" id="fontBtn" title="调整字号" aria-label="调整字号">Aa</button>
                             <textarea
@@ -177,13 +180,13 @@
             <div class="write-output" id="writeOutput" style="display:none;">
                 <div class="output-header">
                     <h3 id="outputTitle">生成结果</h3>
-                    <div class="output-actions">
-                        <button class="btn-secondary" id="copyOutputBtn">📋 复制</button>
-                        <button class="btn-secondary" id="editOutputBtn">✏️ 修改</button>
-                        <button class="btn-secondary" id="regenerateBtn">🔄 重新生成</button>
-                    </div>
                 </div>
                 <div class="output-content" id="outputContent"></div>
+                <div class="output-actions output-actions-bottom">
+                    <button class="btn-secondary" id="copyOutputBtn">📋 复制</button>
+                    <button class="btn-secondary" id="editOutputBtn">✏️ 修改</button>
+                    <button class="btn-secondary" id="regenerateBtn">🔄 重新生成</button>
+                </div>
 
                 <!-- 修改面板（默认隐藏） -->
                 <div class="edit-panel" id="editPanel" style="display:none;">
@@ -386,6 +389,6 @@
     <!-- Toast 提示 -->
     <div class="toast" id="toast"></div>
 
-    <script src="js/app.js?v=28"></script>
+    <script src="js/app.js?v=29"></script>
 </body>
 </html>

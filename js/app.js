@@ -803,7 +803,7 @@ async function rawTestConnection() {
     }
 }
 
-async function sendRequest(messages, temperature) {
+async function sendRequest(messages, temperature, extraInstruction) {
     if (!State.api.baseUrl || !State.api.apiKey) {
         throw new Error('请先在「API」页面配置接口');
     }
@@ -833,6 +833,10 @@ ${RATING_SAFETY_RULE}
 - 台词部分直接写出来即可，不需要加引号
 
 请自然地回应，不要在回复中说明自己是在扮演角色。用该角色的口吻说话。`;
+    }
+
+    if (extraInstruction) {
+        systemPrompt += '\n\n---\n【本次回复的额外指令】\n' + extraInstruction;
     }
 
     const fullMessages = [
@@ -983,6 +987,9 @@ function initChat() {
 
     sendBtn.addEventListener('click', sendMessage);
 
+    // 帮我继续聊
+    document.getElementById('continueChatBtn')?.addEventListener('click', continueChat);
+
     // 清空当前对话（只清当前角色）
     // 清空 / 删除对话（弹出多选菜单）
     const clearBtn = document.getElementById('clearChatBtn');
@@ -1115,7 +1122,7 @@ async function sendMessage() {
 
     // 显示打字动画
     State.sending = true;
-    if (sendBtn) sendBtn.disabled = true;
+    setSendingUI(true);
     const typingEl = addTypingIndicator();
 
     try {
@@ -1133,7 +1140,72 @@ async function sendMessage() {
         showToast('❌ ' + err.message, 'error');
     } finally {
         State.sending = false;
-        if (sendBtn) sendBtn.disabled = false;
+        setSendingUI(false);
+    }
+}
+
+// 输入框和「帮我继续聊」按钮统一的 loading/禁用态
+function setSendingUI(sending) {
+    const sendBtn = document.getElementById('sendBtn');
+    const continueBtn = document.getElementById('continueChatBtn');
+    if (sendBtn) sendBtn.disabled = sending;
+    if (continueBtn) {
+        continueBtn.disabled = sending;
+        continueBtn.textContent = sending ? '⏳ TA 正在思考…' : '✨ 不知道聊什么？让 TA 继续';
+    }
+}
+
+// 用户没说话，让 AI 主动接下一句话题
+async function continueChat() {
+    const sendBtn = document.getElementById('sendBtn');
+    const continueBtn = document.getElementById('continueChatBtn');
+
+    if (State.sending) {
+        showToast('TA 正在说话，请稍候', 'error');
+        return;
+    }
+    const c = getActiveChar();
+    if (!c) {
+        showToast('请先在左侧选择一个角色', 'error');
+        return;
+    }
+    if (!State.api.baseUrl) {
+        showToast('请先在「API」配置接口', 'error');
+        switchToTab('settings');
+        return;
+    }
+
+    const id = State.activeCharacterId;
+    if (!State.conversations[id]) State.conversations[id] = [];
+    const msgs = State.conversations[id];
+
+    // 只有一条欢迎语时也可以继续（会跳过它，让 AI 主动打招呼）
+    if (msgs.length === 0) {
+        // 把欢迎语也带进上下文，让 AI 基于它接下一句
+    }
+
+    const instruction = '现在对话暂时安静了，轮到你主动。请以你刚才的语气、节奏、话题，自然地说下一句话。可以问用户一个问题，也可以继续你自己的叙事。不要自我介绍、不要用"好的"之类的回应语，直接开口说台词 + 动作描写。';
+
+    State.sending = true;
+    setSendingUI(true);
+    const typingEl = addTypingIndicator();
+
+    try {
+        const reply = await sendRequest(msgs, undefined, instruction);
+        typingEl.remove();
+        msgs.push({ role: 'assistant', content: reply });
+        saveToStorage();
+        renderMessages();
+        scrollToBottom();
+    } catch (err) {
+        typingEl.remove();
+        msgs.push({ role: 'error', content: '⚠️ 继续对话失败：' + err.message });
+        renderMessages();
+        scrollToBottom();
+        showToast('❌ ' + err.message, 'error');
+    } finally {
+        State.sending = false;
+        setSendingUI(false);
     }
 }
 
@@ -1206,11 +1278,15 @@ function renderMessages() {
     if (!container) return;
 
     const c = getActiveChar();
-    const msgs = getActiveMessages();
+    const msgs = getActiveMessages().filter(m => m && m.content && String(m.content).trim());
+    const charId = c ? c.id : null;
 
-    container.innerHTML = '';
+    // 角色切换 → 强制全量重建（避免两个角色的 DOM 混在一起）
+    const charChanged = State.__lastCharId !== charId;
+    State.__lastCharId = charId;
 
     if (!c) {
+        container.innerHTML = '';
         const placeholder = document.createElement('div');
         placeholder.className = 'empty-state';
         placeholder.innerHTML = '<div class="empty-icon">🎭</div><h3>选择一个角色开始对话</h3><p>左侧列表点选一个角色，或点 ➕ 新建</p>';
@@ -1218,7 +1294,13 @@ function renderMessages() {
         return;
     }
 
-    // 删除单条消息的回调
+    // 增量优化：DOM 已有 N 条，State 有 M 条
+    // M > N → 只 append 新增的（发 user / 收 AI / 改了消息内容重新渲染）
+    // M < N 或角色变了 → 全量重建（删消息、切角色、清空对话）
+    const rendered = container.querySelectorAll(':scope > .message, :scope > .msg-error').length;
+    const targetCount = msgs.length;
+
+    // 删消息的回调（每次 renderMessages 新建一次，但只在全量重建时用到；增量时新追加的也会绑一次）
     const deleteAtIndex = (i) => {
         const id = State.activeCharacterId;
         if (!id) return;
@@ -1228,25 +1310,47 @@ function renderMessages() {
         scrollToBottom();
     };
 
+    if (!charChanged && targetCount > 0 && rendered < targetCount) {
+        // 增量：把 State 里多出的消息 append 到最后
+        for (let i = rendered; i < targetCount; i++) {
+            const el = createMessageDiv(msgs[i].role, msgs[i].content, i, deleteAtIndex);
+            container.appendChild(el);
+        }
+        const last = container.lastElementChild;
+        if (last) last.classList.add('msg-in');
+        if (State.__refreshFab) State.__refreshFab();
+        return;
+    }
+
+    if (!charChanged && targetCount > 0 && rendered === targetCount) {
+        // 数量不变，可能只是最后一条换了内容（打字动画 → 最终内容），补动画就好
+        const last = container.lastElementChild;
+        if (last && last.classList) last.classList.add('msg-in');
+        if (State.__refreshFab) State.__refreshFab();
+        return;
+    }
+
+    // 全量重建
+    container.innerHTML = '';
+
     if (msgs.length === 0) {
-        // 显示欢迎语
+        // 只有欢迎语
         if (c.greeting) {
-            container.appendChild(createMessageDiv('assistant', c.greeting, null, null));
+            const g = createMessageDiv('assistant', c.greeting, null, null);
+            container.appendChild(g);
+            g.classList.add('msg-in');
         }
         return;
     }
 
     msgs.forEach((msg, i) => {
-        // 跳过空消息（历史上失败的请求会留下空壳，渲染出来就是一大块空白）
-        if (!msg || !msg.content || !String(msg.content).trim()) return;
-        container.appendChild(createMessageDiv(msg.role, msg.content, i, deleteAtIndex));
+        const el = createMessageDiv(msg.role, msg.content, i, deleteAtIndex);
+        container.appendChild(el);
     });
 
-    // 只给最后一条加入场动画，避免几十条消息同时动画造成卡顿
     const last = container.lastElementChild;
-    if (last) last.classList.add('msg-in');
+    if (last && last.classList) last.classList.add('msg-in');
 
-    // 通知 body-mounted FAB 重新检测是否该显示
     if (State.__refreshFab) State.__refreshFab();
 }
 

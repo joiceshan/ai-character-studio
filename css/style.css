@@ -1998,13 +1998,35 @@ input[type="range"]::-webkit-slider-thumb {
 
 /* ========== 移动端：滚动性能 + 紧凑排版 ========== */
 @media (max-width: 640px) {
-    /* 去掉气泡阴影，改用细边框，减少每帧重绘 */
-    .message.ai .msg-content {
-        box-shadow: none;
-        border: 1px solid var(--border-light);
+    /* 🔴 最狠止血：移动端禁用所有阴影/模糊/复杂动画，防止 WebKit 崩溃重启 */
+    * {
+        box-shadow: none !important;
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+    }
+    .chat-messages .message,
+    .chat-header-bar,
+    .app-header,
+    .input-row,
+    .btn-send,
+    .btn-secondary,
+    .btn-primary,
+    .sheet,
+    .sheet-overlay,
+    .rating-chip,
+    .font-btn {
+        box-shadow: none !important;
     }
 
-    /* 消息区禁止横向溢出（否则整行会被推歪） */
+    /* 气泡改用细边框（替代阴影立体感） */
+    .message.ai .msg-content {
+        border: 1px solid var(--border-light);
+    }
+    .message.user .msg-content {
+        border: 1px solid rgba(102, 126, 234, 0.2);
+    }
+
+    /* 消息区禁止横向溢出 */
     .chat-messages {
         overflow-x: hidden;
         gap: 12px;

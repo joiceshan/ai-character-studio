@@ -1359,12 +1359,12 @@ function renderMessages() {
     const c = getActiveChar();
     const allMsgs = getActiveMessages().filter(m => m && m.content && String(m.content).trim());
     const charId = c ? c.id : null;
-    const WINDOW = 60;  // DOM 里最多保留这么多条，超过的折叠
+    const WINDOW = 40;  // 🔴 止血：窗口降到 40 条，进一步减 DOM
 
-    // 角色切换 → 强制全量重建
     const charChanged = State.__lastCharId !== charId;
     State.__lastCharId = charId;
 
+    // 页面没选角色
     if (!c) {
         container.innerHTML = '';
         const placeholder = document.createElement('div');
@@ -1374,27 +1374,29 @@ function renderMessages() {
         return;
     }
 
-    // 计算当前 DOM 里实际 message 节点数（不算 typing indicator）
-    const currentNodes = Array.from(container.children).filter(
-        el => el.classList && (el.classList.contains('message') || el.classList.contains('msg-error'))
-    );
-    const currentCount = currentNodes.length;
-
-    // 目标渲染：如果 total 超过窗口，只取尾部 WINDOW 条
-    const msgsToRender = allMsgs.length > WINDOW
+    // 目标消息集
+    const finalSlice = allMsgs.length > WINDOW
         ? allMsgs.slice(-WINDOW)
         : allMsgs;
-    const skipped = allMsgs.length - msgsToRender.length;
+    const finalSkipped = allMsgs.length - finalSlice.length;
 
-    // 角色没变 + DOM 数量等于目标数量 → 只补最后一条动画（打字动画变最终内容时的增量）
-    if (!charChanged && currentCount === msgsToRender.length && currentCount > 0 && skipped === 0) {
+    // 如果正在增量拆帧渲染，先等它结束
+    if (State.__renderingBatch) return;
+
+    // DOM 已渲染的数量
+    const currentCount = Array.from(container.children).filter(
+        el => el.classList && (el.classList.contains('message') || el.classList.contains('msg-error'))
+    ).length;
+
+    // 角色没变 + DOM 数量等于目标 → 可能只是最后一条换了内容，补动画就好
+    if (!charChanged && currentCount === finalSlice.length && currentCount > 0 && finalSkipped === 0) {
         const last = container.lastElementChild;
         if (last && last.classList) last.classList.add('msg-in');
         if (State.__refreshFab) State.__refreshFab();
         return;
     }
 
-    // 全量重建（切角色、删消息、清空、或窗口折叠状态变化）
+    // 全量重建（先清空，然后拆帧 append）
     container.innerHTML = '';
 
     const deleteAtIndex = (i) => {
@@ -1406,13 +1408,12 @@ function renderMessages() {
         scrollToBottom();
     };
 
-    // 折叠按钮：如果总条数超过窗口，在顶部加个「查看更早 N 条」
-    if (skipped > 0) {
+    // 折叠按钮
+    if (finalSkipped > 0) {
         const unfold = document.createElement('button');
         unfold.className = 'msg-unfold';
-        unfold.textContent = `📜 查看更早的 ${skipped} 条对话`;
+        unfold.textContent = `📜 查看更早的 ${finalSkipped} 条对话`;
         unfold.addEventListener('click', () => {
-            // 直接重置窗口阈值到全量，然后强制重建
             State.__forceFullRender = true;
             renderMessages();
             setTimeout(() => { State.__forceFullRender = false; }, 500);
@@ -1420,40 +1421,44 @@ function renderMessages() {
         container.appendChild(unfold);
     }
 
-    if (allMsgs.length === 0) {
-        if (c.greeting) {
-            const g = createMessageDiv('assistant', c.greeting, null, null);
-            container.appendChild(g);
-            g.classList.add('msg-in');
+    const msgsToRender = allMsgs.length === 0 && c.greeting
+        ? [{ role: 'assistant', content: c.greeting }]
+        : finalSlice;
+
+    // 如果 forceFullRender 打开了，最多渲染 120 条（还是留上限防止 DOM 爆炸）
+    const fullCap = State.__forceFullRender ? 120 : msgsToRender.length;
+    const renderSet = msgsToRender.slice(-fullCap);
+
+    // 🔴 拆帧渲染：每帧只追加 4 条，避免一次性 innerHTML / createElement 堵住主线程
+    let idx = 0;
+    const perFrame = 4;
+    State.__renderingBatch = true;
+
+    const tick = () => {
+        if (!document.body.contains(container)) {
+            State.__renderingBatch = false;
+            return;
         }
-        return;
-    }
+        const end = Math.min(idx + perFrame, renderSet.length);
+        for (; idx < end; idx++) {
+            const msg = renderSet[idx];
+            const globalIdx = allMsgs.length - finalSlice.length + idx;
+            const el = createMessageDiv(msg.role, msg.content, globalIdx, deleteAtIndex);
+            container.appendChild(el);
+        }
 
-    // 如果 forceFullRender 打开过，把剩余消息也渲染出来（但还是有上限，避免 DOM 爆炸）
-    const fullCap = State.__forceFullRender ? 150 : WINDOW;
-    const finalSlice = allMsgs.length > fullCap ? allMsgs.slice(-fullCap) : allMsgs;
-    const finalSkipped = allMsgs.length - finalSlice.length;
-
-    if (State.__forceFullRender && finalSkipped > WINDOW) {
-        // 全量展开时也给个顶部按钮提示
-        const unfold = document.createElement('button');
-        unfold.className = 'msg-unfold';
-        unfold.textContent = `📜 顶部还有 ${finalSkipped} 条（已展开 ${finalSlice.length} 条）`;
-        unfold.disabled = true;
-        container.appendChild(unfold);
-    }
-
-    finalSlice.forEach((msg, i) => {
-        // 全局索引：把被截掉的 skipped 加回来，确保删除回调能精确 splice
-        const globalIdx = allMsgs.length - finalSlice.length + i;
-        const el = createMessageDiv(msg.role, msg.content, globalIdx, deleteAtIndex);
-        container.appendChild(el);
-    });
-
-    const last = container.lastElementChild;
-    if (last && last.classList) last.classList.add('msg-in');
-
-    if (State.__refreshFab) State.__refreshFab();
+        if (idx < renderSet.length) {
+            requestAnimationFrame(tick);
+        } else {
+            // 全部渲染完毕，最后一条加动画（移动端可能被 CSS 禁掉，无副作用）
+            const last = container.lastElementChild;
+            if (last && last.classList) last.classList.add('msg-in');
+            State.__renderingBatch = false;
+            if (State.__refreshFab) State.__refreshFab();
+            scrollToBottom();  // 渲染完自动滚到底
+        }
+    };
+    requestAnimationFrame(tick);
 }
 
 function restoreMessages() {

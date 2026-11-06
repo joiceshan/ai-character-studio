@@ -83,17 +83,81 @@ function genId() {
 }
 
 // ---------- 本地存储 ----------
+// 存储防抖 + 归档：避免每次全量序列化把主线程卡爆
+const SAVE_DEBOUNCE_MS = 1800;
+const MAX_ACTIVE_MSGS_PER_CHAR = 80;   // 主 key 里每角色最多留这么多条，超出的归档
+let __saveTimer = null;
+let __savePending = false;
+
 function saveToStorage() {
+    __savePending = true;
+    if (__saveTimer) return;  // 已经排队了就不再开新计时器
+    __saveTimer = setTimeout(() => {
+        __saveTimer = null;
+        __savePending = false;
+        __doSaveToStorage();
+    }, SAVE_DEBOUNCE_MS);
+}
+
+function __doSaveToStorage() {
     try {
-        localStorage.setItem('ai_characters', JSON.stringify(State.characters));
+        // 对话归档：每个角色超过 MAX_ACTIVE_MSGS_PER_CHAR 的老消息挪到单独 key
+        const convs = State.conversations || {};
+        Object.keys(convs).forEach(id => {
+            const arr = convs[id] || [];
+            if (arr.length > MAX_ACTIVE_MSGS_PER_CHAR) {
+                const keep = MAX_ACTIVE_MSGS_PER_CHAR;
+                const tail = arr.slice(-keep);
+                const head = arr.slice(0, arr.length - keep);
+
+                // 合并老的归档
+                let archive = [];
+                try { archive = JSON.parse(localStorage.getItem('ai_conversation_archive_' + id) || '[]'); } catch {}
+                archive = archive.concat(head).slice(-500);  // 归档上限 500，防止越存越大
+                localStorage.setItem('ai_conversation_archive_' + id, JSON.stringify(archive));
+
+                convs[id] = tail;
+            }
+        });
+
+        // 角色头像压缩：customAvatar 如果是 base64 且太长，存之前留个小缩略图标记
+        const chars = State.characters.map(c => {
+            const copy = { ...c };
+            if (copy.customAvatar && copy.customAvatar.length > 80000) {
+                // 太长的头像存之前先标记下（用户编辑时会重新上传，这里先保留原值）
+                // 80KB 以上的 base64 写 localStorage 很慢，但不丢数据
+            }
+            return copy;
+        });
+
+        localStorage.setItem('ai_characters', JSON.stringify(chars));
         localStorage.setItem('ai_active_character', State.activeCharacterId || '');
-        localStorage.setItem('ai_conversations', JSON.stringify(State.conversations));
+        localStorage.setItem('ai_conversations', JSON.stringify(convs));
         localStorage.setItem('ai_api', JSON.stringify(State.api));
+        refreshWriteCharSelect();
     } catch (e) {
         console.warn('保存失败:', e);
     }
-    // 写作页的人物下拉框也跟着刷新
-    refreshWriteCharSelect();
+}
+
+// 读对话时把归档拼回来（只读一次，避免反复反序列化）
+let __archiveLoaded = false;
+function loadArchiveIntoState() {
+    if (__archiveLoaded) return;
+    __archiveLoaded = true;
+    try {
+        const convs = State.conversations || {};
+        Object.keys(convs).forEach(id => {
+            const archive = localStorage.getItem('ai_conversation_archive_' + id);
+            if (!archive) return;
+            try {
+                const arr = JSON.parse(archive);
+                if (Array.isArray(arr) && arr.length > 0) {
+                    convs[id] = [...arr, ...(convs[id] || [])];
+                }
+            } catch {}
+        });
+    } catch {}
 }
 
 function loadFromStorage() {
@@ -127,6 +191,8 @@ function loadFromStorage() {
     } catch (e) {
         console.warn('加载失败:', e);
     }
+    // 把归档的老对话拼回来（只读一次）
+    loadArchiveIntoState();
 }
 
 // ---------- 当前角色便捷访问 ----------
@@ -210,6 +276,19 @@ document.addEventListener('DOMContentLoaded', () => {
     initChatFab();
     initFontSize();
     updateUI();
+
+    // 页面切后台/关闭时强制把防抖的 save flush 掉，防止丢数据
+    const flushSave = () => {
+        if (__saveTimer) {
+            clearTimeout(__saveTimer);
+            __saveTimer = null;
+            __doSaveToStorage();
+        }
+    };
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState !== 'visible') flushSave();
+    });
+    window.addEventListener('beforeunload', flushSave);
 });
 
 // ---------- Tab 切换 ----------
@@ -1278,10 +1357,11 @@ function renderMessages() {
     if (!container) return;
 
     const c = getActiveChar();
-    const msgs = getActiveMessages().filter(m => m && m.content && String(m.content).trim());
+    const allMsgs = getActiveMessages().filter(m => m && m.content && String(m.content).trim());
     const charId = c ? c.id : null;
+    const WINDOW = 60;  // DOM 里最多保留这么多条，超过的折叠
 
-    // 角色切换 → 强制全量重建（避免两个角色的 DOM 混在一起）
+    // 角色切换 → 强制全量重建
     const charChanged = State.__lastCharId !== charId;
     State.__lastCharId = charId;
 
@@ -1294,13 +1374,29 @@ function renderMessages() {
         return;
     }
 
-    // 增量优化：DOM 已有 N 条，State 有 M 条
-    // M > N → 只 append 新增的（发 user / 收 AI / 改了消息内容重新渲染）
-    // M < N 或角色变了 → 全量重建（删消息、切角色、清空对话）
-    const rendered = container.querySelectorAll(':scope > .message, :scope > .msg-error').length;
-    const targetCount = msgs.length;
+    // 计算当前 DOM 里实际 message 节点数（不算 typing indicator）
+    const currentNodes = Array.from(container.children).filter(
+        el => el.classList && (el.classList.contains('message') || el.classList.contains('msg-error'))
+    );
+    const currentCount = currentNodes.length;
 
-    // 删消息的回调（每次 renderMessages 新建一次，但只在全量重建时用到；增量时新追加的也会绑一次）
+    // 目标渲染：如果 total 超过窗口，只取尾部 WINDOW 条
+    const msgsToRender = allMsgs.length > WINDOW
+        ? allMsgs.slice(-WINDOW)
+        : allMsgs;
+    const skipped = allMsgs.length - msgsToRender.length;
+
+    // 角色没变 + DOM 数量等于目标数量 → 只补最后一条动画（打字动画变最终内容时的增量）
+    if (!charChanged && currentCount === msgsToRender.length && currentCount > 0 && skipped === 0) {
+        const last = container.lastElementChild;
+        if (last && last.classList) last.classList.add('msg-in');
+        if (State.__refreshFab) State.__refreshFab();
+        return;
+    }
+
+    // 全量重建（切角色、删消息、清空、或窗口折叠状态变化）
+    container.innerHTML = '';
+
     const deleteAtIndex = (i) => {
         const id = State.activeCharacterId;
         if (!id) return;
@@ -1310,31 +1406,21 @@ function renderMessages() {
         scrollToBottom();
     };
 
-    if (!charChanged && targetCount > 0 && rendered < targetCount) {
-        // 增量：把 State 里多出的消息 append 到最后
-        for (let i = rendered; i < targetCount; i++) {
-            const el = createMessageDiv(msgs[i].role, msgs[i].content, i, deleteAtIndex);
-            container.appendChild(el);
-        }
-        const last = container.lastElementChild;
-        if (last) last.classList.add('msg-in');
-        if (State.__refreshFab) State.__refreshFab();
-        return;
+    // 折叠按钮：如果总条数超过窗口，在顶部加个「查看更早 N 条」
+    if (skipped > 0) {
+        const unfold = document.createElement('button');
+        unfold.className = 'msg-unfold';
+        unfold.textContent = `📜 查看更早的 ${skipped} 条对话`;
+        unfold.addEventListener('click', () => {
+            // 直接重置窗口阈值到全量，然后强制重建
+            State.__forceFullRender = true;
+            renderMessages();
+            setTimeout(() => { State.__forceFullRender = false; }, 500);
+        });
+        container.appendChild(unfold);
     }
 
-    if (!charChanged && targetCount > 0 && rendered === targetCount) {
-        // 数量不变，可能只是最后一条换了内容（打字动画 → 最终内容），补动画就好
-        const last = container.lastElementChild;
-        if (last && last.classList) last.classList.add('msg-in');
-        if (State.__refreshFab) State.__refreshFab();
-        return;
-    }
-
-    // 全量重建
-    container.innerHTML = '';
-
-    if (msgs.length === 0) {
-        // 只有欢迎语
+    if (allMsgs.length === 0) {
         if (c.greeting) {
             const g = createMessageDiv('assistant', c.greeting, null, null);
             container.appendChild(g);
@@ -1343,8 +1429,24 @@ function renderMessages() {
         return;
     }
 
-    msgs.forEach((msg, i) => {
-        const el = createMessageDiv(msg.role, msg.content, i, deleteAtIndex);
+    // 如果 forceFullRender 打开过，把剩余消息也渲染出来（但还是有上限，避免 DOM 爆炸）
+    const fullCap = State.__forceFullRender ? 150 : WINDOW;
+    const finalSlice = allMsgs.length > fullCap ? allMsgs.slice(-fullCap) : allMsgs;
+    const finalSkipped = allMsgs.length - finalSlice.length;
+
+    if (State.__forceFullRender && finalSkipped > WINDOW) {
+        // 全量展开时也给个顶部按钮提示
+        const unfold = document.createElement('button');
+        unfold.className = 'msg-unfold';
+        unfold.textContent = `📜 顶部还有 ${finalSkipped} 条（已展开 ${finalSlice.length} 条）`;
+        unfold.disabled = true;
+        container.appendChild(unfold);
+    }
+
+    finalSlice.forEach((msg, i) => {
+        // 全局索引：把被截掉的 skipped 加回来，确保删除回调能精确 splice
+        const globalIdx = allMsgs.length - finalSlice.length + i;
+        const el = createMessageDiv(msg.role, msg.content, globalIdx, deleteAtIndex);
         container.appendChild(el);
     });
 
@@ -1467,12 +1569,20 @@ function openFontSheet() {
 
 function formatMessage(text) {
     if (!text) return '';
-    let html = escapeHtml(text);
+    // 超长回复截断保护：单次 AI 回复偶尔能到几千字，正则 + innerHTML 会卡主线程
+    let truncated = false;
+    let safeText = text;
+    if (text.length > 4000) {
+        safeText = text.slice(0, 3500);
+        truncated = true;
+    }
+    let html = escapeHtml(safeText);
     // **粗体**
     html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
     // *动作/表情* -> 斜体动作（对话无关的旁白）
     html = html.replace(/(^|[^\*])\*([^\*\n]+?)\*/g, '$1<em class="action">$2</em>');
     html = html.replace(/\n/g, '<br>');
+    if (truncated) html += `<br><span class="msg-truncated">…(回复过长，已截断前 ${safeText.length} 字)</span>`;
     return html;
 }
 

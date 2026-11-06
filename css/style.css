@@ -677,6 +677,31 @@ input, textarea, select {
     30% { transform: translateY(-6px); opacity: 1; }
 }
 
+/* 折叠按钮（窗口化渲染顶部） */
+.msg-unfold {
+    align-self: center;
+    margin: 12px auto 4px;
+    padding: 6px 16px;
+    background: rgba(102, 126, 234, 0.08);
+    border: 1px dashed rgba(102, 126, 234, 0.4);
+    border-radius: 18px;
+    font-size: 12px;
+    color: #667eea;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.msg-unfold:hover:not(:disabled) {
+    background: rgba(102, 126, 234, 0.16);
+    border-color: #667eea;
+}
+.msg-unfold:disabled { opacity: 0.55; cursor: default; }
+
+.msg-truncated {
+    color: var(--text-lighter);
+    font-size: 12px;
+    font-style: italic;
+}
+
 /* 输入区域 */
 .chat-input-area {
     flex-shrink: 0;

@@ -629,7 +629,7 @@ function initCharacterForm() {
         }
     });
 
-    // 分享（导出 JSON —— 在页面内弹出展示框，用户长按/点选自己复制）
+    // 分享（导出精简分享码：不含头像 base64，字段名压到最短）
     document.getElementById('exportCharBtn').addEventListener('click', () => {
         const nameEl = document.getElementById('charName');
         const name = nameEl.value.trim();
@@ -637,59 +637,57 @@ function initCharacterForm() {
 
         const emojiAvatar = document.querySelector('.avatar-option.selected')?.dataset.avatar || '';
         const data = {
-            v: 1, t: 'ai-char-studio',
-            name,
-            avatar: emojiAvatar,
-            customAvatar: pendingCustomAvatar,
-            identity: document.getElementById('charIdentity').value.trim(),
-            ageGroup: document.getElementById('charAgeGroup').value,
-            rating: document.getElementById('charRating').value,
-            personality: document.getElementById('charPersonality').value.trim(),
-            background: document.getElementById('charBackground').value.trim(),
-            greeting: document.getElementById('charGreeting').value.trim()
+            t: 'acs',
+            n: name,
+            a: emojiAvatar,
+            i: document.getElementById('charIdentity').value.trim(),
+            g: document.getElementById('charAgeGroup').value,
+            r: document.getElementById('charRating').value,
+            p: document.getElementById('charPersonality').value.trim(),
+            b: document.getElementById('charBackground').value.trim(),
+            s: document.getElementById('charGreeting').value.trim()
         };
-        const json = JSON.stringify(data);
-        openShareSheet(json);
+        openShareSheet(JSON.stringify(data));
     });
 
-    // 导入（粘贴 JSON 重建角色）
+    // 导入（粘贴分享码重建角色）
     document.getElementById('importCharBtn').addEventListener('click', () => {
-        const raw = window.prompt('请粘贴朋友发来的角色 JSON：');
+        const raw = window.prompt('请粘贴朋友发来的分享码：');
         if (!raw) return;
-        let data;
+        let d;
         try {
-            data = JSON.parse(raw.trim());
+            d = JSON.parse(raw.trim());
         } catch {
-            showToast('❌ JSON 格式不正确，请检查复制是否完整', 'error');
+            showToast('❌ 分享码不完整，请重新复制', 'error');
             return;
         }
-        if (!data || typeof data !== 'object' || !data.name) {
-            showToast('❌ 缺少人物名称字段', 'error');
-            return;
-        }
-        // 回填到表单（让用户确认后再保存）
-        document.getElementById('charName').value = data.name || '';
-        document.getElementById('charIdentity').value = data.identity || '';
-        document.getElementById('charAgeGroup').value = data.ageGroup || 'young';
-        document.getElementById('charRating').value = data.rating || 'all';
-        document.getElementById('charPersonality').value = data.personality || '';
-        document.getElementById('charBackground').value = data.background || '';
-        document.getElementById('charGreeting').value = data.greeting || '';
-        // 头像：优先 customAvatar，没就回退 emoji
-        if (data.customAvatar && typeof data.customAvatar === 'string' && data.customAvatar.length > 10) {
-            pendingCustomAvatar = data.customAvatar;
+        // 兼容精简码（n/i/p/b/s）和旧版长字段
+        const name = d.n || d.name || '';
+        if (!name) { showToast('❌ 缺少人物名称', 'error'); return; }
+
+        document.getElementById('charName').value = name;
+        document.getElementById('charIdentity').value = d.i || d.identity || '';
+        document.getElementById('charAgeGroup').value = d.g || d.ageGroup || 'young';
+        document.getElementById('charRating').value = d.r || d.rating || 'all';
+        document.getElementById('charPersonality').value = d.p || d.personality || '';
+        document.getElementById('charBackground').value = d.b || d.background || '';
+        document.getElementById('charGreeting').value = d.s || d.greeting || '';
+
+        // 头像：旧版可能带 customAvatar，优先用；否则回退 emoji
+        if (d.customAvatar && typeof d.customAvatar === 'string' && d.customAvatar.length > 10) {
+            pendingCustomAvatar = d.customAvatar;
         } else {
             pendingCustomAvatar = '';
-            if (data.avatar) {
+            const av = d.a || d.avatar;
+            if (av) {
                 document.querySelectorAll('.avatar-option').forEach(b => {
-                    b.classList.toggle('selected', b.dataset.avatar === data.avatar);
+                    b.classList.toggle('selected', b.dataset.avatar === av);
                 });
             }
         }
-        // 强制模式为新建（让用户自己确认名字再保存）
         window.__charFormMode = 'new';
         window.__charFormEditId = null;
-        showToast('✨ 已导入，请检查后点「💾 保存人物设定」', 'success');
+        showToast('✨ 已导入，检查后点「💾 保存人物设定」', 'success');
     });
 
     // 预设按钮

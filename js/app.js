@@ -630,7 +630,7 @@ function initCharacterForm() {
     });
 
     // 分享（导出 JSON 字符串到剪贴板）
-    document.getElementById('exportCharBtn').addEventListener('click', async () => {
+    document.getElementById('exportCharBtn').addEventListener('click', () => {
         const nameEl = document.getElementById('charName');
         const name = nameEl.value.trim();
         if (!name) { showToast('请先填写人物名称', 'error'); return; }
@@ -649,12 +649,30 @@ function initCharacterForm() {
             greeting: document.getElementById('charGreeting').value.trim()
         };
         const json = JSON.stringify(data);
+
+        // 🔴 移动端剪贴板终极方案：hidden textarea + execCommand('copy')
+        // navigator.clipboard 在微信/部分手机上会假装成功但不写进去
         try {
-            await navigator.clipboard.writeText(json);
-            showToast('✅ 已复制到剪贴板\n可以粘贴发给朋友', 'success');
+            const ta = document.createElement('textarea');
+            ta.value = json;
+            ta.setAttribute('readonly', '');
+            ta.style.position = 'fixed';
+            ta.style.left = '-9999px';
+            ta.style.top = '-9999px';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.select();
+            ta.setSelectionRange(0, ta.value.length);
+            const ok = document.execCommand('copy');
+            document.body.removeChild(ta);
+            if (ok) {
+                showToast('✅ 已复制到剪贴板\n长按输入框可粘贴', 'success');
+            } else {
+                // 降级：弹 prompt 让用户手动选中复制
+                window.prompt('复制失败，请手动复制下面这段 JSON（长按选中即可）：', json);
+            }
         } catch (e) {
-            // 降级：弹 prompt 让用户手动复制
-            window.prompt('请手动复制下面这段 JSON（发给朋友即可导入）：', json);
+            window.prompt('复制失败，请手动复制下面这段 JSON：', json);
         }
     });
 

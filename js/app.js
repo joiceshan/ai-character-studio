@@ -651,44 +651,7 @@ function initCharacterForm() {
     });
 
     // 导入（粘贴分享码重建角色）
-    document.getElementById('importCharBtn').addEventListener('click', () => {
-        const raw = window.prompt('请粘贴朋友发来的分享码：');
-        if (!raw) return;
-        let d;
-        try {
-            d = JSON.parse(raw.trim());
-        } catch {
-            showToast('❌ 分享码不完整，请重新复制', 'error');
-            return;
-        }
-        // 兼容精简码（n/i/p/b/s）和旧版长字段
-        const name = d.n || d.name || '';
-        if (!name) { showToast('❌ 缺少人物名称', 'error'); return; }
-
-        document.getElementById('charName').value = name;
-        document.getElementById('charIdentity').value = d.i || d.identity || '';
-        document.getElementById('charAgeGroup').value = d.g || d.ageGroup || 'young';
-        document.getElementById('charRating').value = d.r || d.rating || 'all';
-        document.getElementById('charPersonality').value = d.p || d.personality || '';
-        document.getElementById('charBackground').value = d.b || d.background || '';
-        document.getElementById('charGreeting').value = d.s || d.greeting || '';
-
-        // 头像：旧版可能带 customAvatar，优先用；否则回退 emoji
-        if (d.customAvatar && typeof d.customAvatar === 'string' && d.customAvatar.length > 10) {
-            pendingCustomAvatar = d.customAvatar;
-        } else {
-            pendingCustomAvatar = '';
-            const av = d.a || d.avatar;
-            if (av) {
-                document.querySelectorAll('.avatar-option').forEach(b => {
-                    b.classList.toggle('selected', b.dataset.avatar === av);
-                });
-            }
-        }
-        window.__charFormMode = 'new';
-        window.__charFormEditId = null;
-        showToast('✨ 已导入，检查后点「💾 保存人物设定」', 'success');
-    });
+    document.getElementById('importCharBtn').addEventListener('click', openImportSheet);
 
     // 预设按钮
     document.getElementById('loadPresetBtn').addEventListener('click', openPresetModal);
@@ -1196,6 +1159,112 @@ function openShareSheet(json) {
         } catch (e) {
             showToast('❌ 复制失败，请长按文字手动复制', 'error');
         }
+    });
+}
+
+// ---------- 导入角色（页面内粘贴框，兼容各种字段名/杂字） ----------
+function openImportSheet() {
+    const overlay = document.createElement('div');
+    overlay.className = 'sheet-overlay';
+
+    const sheet = document.createElement('div');
+    sheet.className = 'sheet';
+    sheet.innerHTML = `
+        <div class="sheet-handle"></div>
+        <div class="sheet-title">📥 导入角色</div>
+        <div class="sheet-sub">把朋友发来的分享码粘贴到下面</div>
+        <textarea class="import-json-box" id="importJsonBox" placeholder="粘贴分享码，形如 {&quot;t&quot;:&quot;acs&quot;,&quot;n&quot;:&quot;名字&quot;,...}"></textarea>
+        <div class="sheet-tip" id="importErr" style="display:none;color:#f56565;"></div>
+        <button class="sheet-item" id="importDoBtn">✅ 导入并填入设定表</button>
+        <button class="sheet-cancel">取消</button>
+    `;
+
+    document.body.appendChild(overlay);
+    document.body.appendChild(sheet);
+
+    const ta = sheet.querySelector('#importJsonBox');
+    const errBox = sheet.querySelector('#importErr');
+
+    const close = () => {
+        overlay.remove();
+        sheet.remove();
+        document.removeEventListener('keydown', onKey);
+    };
+    const onKey = (ev) => { if (ev.key === 'Escape') close(); };
+    document.addEventListener('keydown', onKey);
+
+    overlay.addEventListener('click', close);
+    sheet.querySelector('.sheet-cancel').addEventListener('click', close);
+
+    const fail = (msg) => {
+        errBox.style.display = 'block';
+        errBox.textContent = msg;
+    };
+
+    sheet.querySelector('#importDoBtn').addEventListener('click', () => {
+        errBox.style.display = 'none';
+
+        // 🔴 宽容解析：去空白/换行/引号包裹/HTML 实体，只截取 { ... } 本体
+        let s = (ta.value || '').trim();
+        s = s.replace(/^\uFEFF/, '')
+             .replace(/&quot;|&#34;/g, '"')
+             .replace(/&#39;|&apos;/g, "'")
+             .replace(/&amp;/g, '&')
+             .replace(/&lt;/g, '<')
+             .replace(/&gt;/g, '>');
+        // 去掉可能被包在别人加的引号里
+        if (/^["']\s*\{/.test(s)) s = s.slice(1, s.lastIndexOf('}') + 1);
+        const st = s.indexOf('{'), en = s.lastIndexOf('}');
+        if (st >= 0 && en > st) s = s.slice(st, en + 1);
+
+        let d;
+        try {
+            d = JSON.parse(s);
+        } catch (e) {
+            fail('分享码不完整或格式错误：' + e.message);
+            return;
+        }
+        // 万一被二次 stringify（整段是个字符串）
+        if (typeof d === 'string') {
+            try { d = JSON.parse(d); } catch {}
+        }
+        if (!d || typeof d !== 'object') {
+            fail('分享码格式不对，应为 { ... } 形式的对象');
+            return;
+        }
+
+        // 兼容精简码（n/i/p/b/s）和旧版长字段，再兜底几个常见中文键
+        const name = (d.n || d.name || d['名字'] || d['姓名'] || '').toString().trim();
+        if (!name) {
+            fail('分享码里没有找到人物名字（缺少 n / name 字段），请确认复制完整');
+            return;
+        }
+
+        document.getElementById('charName').value = name;
+        document.getElementById('charIdentity').value = d.i || d.identity || '';
+        document.getElementById('charAgeGroup').value = d.g || d.ageGroup || 'young';
+        document.getElementById('charRating').value = d.r || d.rating || 'all';
+        document.getElementById('charPersonality').value = d.p || d.personality || '';
+        document.getElementById('charBackground').value = d.b || d.background || '';
+        document.getElementById('charGreeting').value = d.s || d.greeting || '';
+
+        // 头像：旧版可能带 customAvatar，优先用；否则回退 emoji
+        if (d.customAvatar && typeof d.customAvatar === 'string' && d.customAvatar.length > 10) {
+            pendingCustomAvatar = d.customAvatar;
+        } else {
+            pendingCustomAvatar = '';
+            const av = d.a || d.avatar;
+            if (av) {
+                document.querySelectorAll('.avatar-option').forEach(b => {
+                    b.classList.toggle('selected', b.dataset.avatar === av);
+                });
+            }
+        }
+
+        window.__charFormMode = 'new';
+        window.__charFormEditId = null;
+        close();
+        showToast(`✨ 已导入「${name}」，检查后点保存`, 'success');
     });
 }
 

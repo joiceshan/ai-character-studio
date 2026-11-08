@@ -629,6 +629,75 @@ function initCharacterForm() {
         }
     });
 
+    // 分享（导出 JSON 字符串到剪贴板）
+    document.getElementById('exportCharBtn').addEventListener('click', async () => {
+        const nameEl = document.getElementById('charName');
+        const name = nameEl.value.trim();
+        if (!name) { showToast('请先填写人物名称', 'error'); return; }
+
+        const emojiAvatar = document.querySelector('.avatar-option.selected')?.dataset.avatar || '';
+        const data = {
+            v: 1, t: 'ai-char-studio',
+            name,
+            avatar: emojiAvatar,
+            customAvatar: pendingCustomAvatar,
+            identity: document.getElementById('charIdentity').value.trim(),
+            ageGroup: document.getElementById('charAgeGroup').value,
+            rating: document.getElementById('charRating').value,
+            personality: document.getElementById('charPersonality').value.trim(),
+            background: document.getElementById('charBackground').value.trim(),
+            greeting: document.getElementById('charGreeting').value.trim()
+        };
+        const json = JSON.stringify(data);
+        try {
+            await navigator.clipboard.writeText(json);
+            showToast('✅ 已复制到剪贴板\n可以粘贴发给朋友', 'success');
+        } catch (e) {
+            // 降级：弹 prompt 让用户手动复制
+            window.prompt('请手动复制下面这段 JSON（发给朋友即可导入）：', json);
+        }
+    });
+
+    // 导入（粘贴 JSON 重建角色）
+    document.getElementById('importCharBtn').addEventListener('click', () => {
+        const raw = window.prompt('请粘贴朋友发来的角色 JSON：');
+        if (!raw) return;
+        let data;
+        try {
+            data = JSON.parse(raw.trim());
+        } catch {
+            showToast('❌ JSON 格式不正确，请检查复制是否完整', 'error');
+            return;
+        }
+        if (!data || typeof data !== 'object' || !data.name) {
+            showToast('❌ 缺少人物名称字段', 'error');
+            return;
+        }
+        // 回填到表单（让用户确认后再保存）
+        document.getElementById('charName').value = data.name || '';
+        document.getElementById('charIdentity').value = data.identity || '';
+        document.getElementById('charAgeGroup').value = data.ageGroup || 'young';
+        document.getElementById('charRating').value = data.rating || 'all';
+        document.getElementById('charPersonality').value = data.personality || '';
+        document.getElementById('charBackground').value = data.background || '';
+        document.getElementById('charGreeting').value = data.greeting || '';
+        // 头像：优先 customAvatar，没就回退 emoji
+        if (data.customAvatar && typeof data.customAvatar === 'string' && data.customAvatar.length > 10) {
+            pendingCustomAvatar = data.customAvatar;
+        } else {
+            pendingCustomAvatar = '';
+            if (data.avatar) {
+                document.querySelectorAll('.avatar-option').forEach(b => {
+                    b.classList.toggle('selected', b.dataset.avatar === data.avatar);
+                });
+            }
+        }
+        // 强制模式为新建（让用户自己确认名字再保存）
+        window.__charFormMode = 'new';
+        window.__charFormEditId = null;
+        showToast('✨ 已导入，请检查后点「💾 保存人物设定」', 'success');
+    });
+
     // 预设按钮
     document.getElementById('loadPresetBtn').addEventListener('click', openPresetModal);
     document.getElementById('closePresetBtn').addEventListener('click', () => {

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#667eea">
     <title>AI 人物工坊 · Character Studio</title>
-    <link rel="stylesheet" href="css/style.css?v=31">
+    <link rel="stylesheet" href="css/style.css?v=32">
 </head>
 <body>
     <!-- 顶部导航 -->
@@ -85,17 +85,19 @@
                         <button class="continue-btn" id="continueChatBtn" title="AI 帮你继续这场对话" aria-label="继续这场对话">
                             ✨ 不知道聊什么？让 TA 继续
                         </button>
-                        <div class="input-row">
-                            <button class="font-btn" id="fontBtn" title="调整字号" aria-label="调整字号">Aa</button>
-                            <textarea
-                                id="chatInput"
-                                placeholder="输入消息... (Enter 发送, Shift+Enter 换行)"
-                                rows="1"
-                            ></textarea>
-                            <button class="btn-send" id="sendBtn">
-                                <span>发送</span>
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-                            </button>
+                        <div class="input-row-wrapper">
+                            <div class="input-row">
+                                <button class="font-btn" id="fontBtn" title="调整字号" aria-label="调整字号">Aa</button>
+                                <textarea
+                                    id="chatInput"
+                                    placeholder="输入消息... (Enter 发送, Shift+Enter 换行)"
+                                    rows="1"
+                                ></textarea>
+                                <button class="btn-send" id="sendBtn">
+                                    <span>发送</span>
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -283,7 +285,9 @@
 
                 <div class="char-form-actions">
                     <button class="btn-primary btn-large" id="saveCharBtn">💾 保存人物设定</button>
-                    <button class="btn-danger-outline btn-large" id="clearMemoryBtn" title="只清除对话，保留人物设定">🗑️ 清除该角色对话记忆</button>
+                    <button class="btn-secondary btn-large" id="exportCharBtn" title="导出当前角色为 JSON 字符串，可分享给朋友">📤 分享</button>
+                    <button class="btn-secondary btn-large" id="importCharBtn" title="粘贴 JSON 字符串导入角色">📥 导入</button>
+                    <button class="btn-danger-outline btn-large" id="clearMemoryBtn" title="只清除对话，保留人物设定">🗑️ 清除对话记忆</button>
                 </div>
             </div>
 
@@ -389,6 +393,6 @@
     <!-- Toast 提示 -->
     <div class="toast" id="toast"></div>
 
-    <script src="js/app.js?v=31"></script>
+    <script src="js/app.js?v=32"></script>
 </body>
 </html>

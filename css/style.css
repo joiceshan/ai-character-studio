@@ -707,8 +707,51 @@ input, textarea, select {
     flex-shrink: 0;
     padding: 12px 0;
     background: var(--bg);
+    position: relative;   /* 让 continue-btn 相对定位 */
 }
 
+.input-row-wrapper {
+    width: 100%;
+}
+
+/* 🔴 让 TA 继续按钮：绝对定位浮在输入区右上角，不占 flex 空间 */
+.continue-btn {
+    position: absolute;
+    top: -34px;
+    right: 0;
+    padding: 5px 12px;
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.12), rgba(240, 147, 251, 0.12));
+    border: 1px dashed rgba(102, 126, 234, 0.55);
+    border-radius: 16px;
+    color: #667eea;
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+    line-height: 1.2;
+    transition: all 0.2s;
+    z-index: 2;
+}
+.continue-btn:hover:not(:disabled) {
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.22), rgba(240, 147, 251, 0.22));
+    border-color: #667eea;
+}
+.continue-btn:active { opacity: 0.75; }
+.continue-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* 输入区顶部留出一点空间给 continue-btn 浮着，避免被切 */
+.chat-main .chat-messages {
+    /* 消息区不需要额外 padding-top，continue-btn 是 absolute，不参与布局 */
+}
+@media (max-width: 640px) {
+    .continue-btn {
+        top: -30px;
+        font-size: 11px;
+        padding: 4px 10px;
+        border-radius: 14px;
+    }
+}
+
+/* 输入行（被 .input-row-wrapper 包了一层） */
 .input-row {
     display: flex;
     gap: 8px;

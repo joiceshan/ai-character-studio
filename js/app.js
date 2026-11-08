@@ -629,7 +629,7 @@ function initCharacterForm() {
         }
     });
 
-    // 分享（导出 JSON —— 直接弹出来让用户自己选中复制，绕开所有移动端剪贴板坑）
+    // 分享（导出 JSON —— 在页面内弹出展示框，用户长按/点选自己复制）
     document.getElementById('exportCharBtn').addEventListener('click', () => {
         const nameEl = document.getElementById('charName');
         const name = nameEl.value.trim();
@@ -649,8 +649,7 @@ function initCharacterForm() {
             greeting: document.getElementById('charGreeting').value.trim()
         };
         const json = JSON.stringify(data);
-        // 🔴 不走剪贴板，直接弹出来让用户自己长按选中复制
-        window.prompt('📋 长按下面的 JSON 全选后复制，发给朋友即可导入：', json);
+        openShareSheet(json);
     });
 
     // 导入（粘贴 JSON 重建角色）
@@ -1145,6 +1144,48 @@ function initChat() {
 }
 
 // ---------- 删除对话：底部抽屉（动态挂到 body，避免被父级布局裁切） ----------
+// ---------- 分享角色（页面内展示 JSON，让用户自己复制） ----------
+function openShareSheet(json) {
+    const overlay = document.createElement('div');
+    overlay.className = 'sheet-overlay';
+
+    const sheet = document.createElement('div');
+    sheet.className = 'sheet';
+    sheet.innerHTML = `
+        <div class="sheet-handle"></div>
+        <div class="sheet-title">📤 分享角色</div>
+        <div class="sheet-sub">长按下面框里的文字全选复制，发给朋友即可导入</div>
+        <textarea class="share-json-box" readonly></textarea>
+        <button class="sheet-item" id="shareSelectAll">👆 一键全选</button>
+        <button class="sheet-cancel">关闭</button>
+    `;
+
+    document.body.appendChild(overlay);
+    document.body.appendChild(sheet);
+
+    const ta = sheet.querySelector('.share-json-box');
+    ta.value = json;   // 用 value 赋值，避免 HTML 转义问题
+
+    const close = () => {
+        overlay.remove();
+        sheet.remove();
+        document.removeEventListener('keydown', onKey);
+    };
+    const onKey = (ev) => { if (ev.key === 'Escape') close(); };
+    document.addEventListener('keydown', onKey);
+
+    overlay.addEventListener('click', close);
+    sheet.querySelector('.sheet-cancel').addEventListener('click', close);
+
+    // 一键全选：选中后可长按/点系统「复制」
+    sheet.querySelector('#shareSelectAll').addEventListener('click', () => {
+        ta.focus();
+        ta.select();
+        ta.setSelectionRange(0, ta.value.length);
+        showToast('已全选，点输入框上方「拷贝」即可', 'success');
+    });
+}
+
 function openClearSheet() {
     const c = getActiveChar();
     if (!c) { showToast('请先选择角色', 'error'); return; }

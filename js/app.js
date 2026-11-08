@@ -1142,7 +1142,7 @@ function initChat() {
 }
 
 // ---------- 删除对话：底部抽屉（动态挂到 body，避免被父级布局裁切） ----------
-// ---------- 分享角色（页面内展示 JSON，让用户自己复制） ----------
+// ---------- 分享角色（页面内展示精简分享码） ----------
 function openShareSheet(json) {
     const overlay = document.createElement('div');
     overlay.className = 'sheet-overlay';
@@ -1152,17 +1152,17 @@ function openShareSheet(json) {
     sheet.innerHTML = `
         <div class="sheet-handle"></div>
         <div class="sheet-title">📤 分享角色</div>
-        <div class="sheet-sub">长按下面框里的文字全选复制，发给朋友即可导入</div>
-        <textarea class="share-json-box" readonly></textarea>
-        <button class="sheet-item" id="shareSelectAll">👆 一键全选</button>
+        <div class="sheet-sub">长按下面的文字 → 选「复制」即可发给朋友</div>
+        <div class="share-json-box" id="shareJsonBox"></div>
+        <button class="sheet-item" id="shareCopyBtn">📋 一键复制到剪贴板</button>
         <button class="sheet-cancel">关闭</button>
     `;
 
     document.body.appendChild(overlay);
     document.body.appendChild(sheet);
 
-    const ta = sheet.querySelector('.share-json-box');
-    ta.value = json;   // 用 value 赋值，避免 HTML 转义问题
+    // 用 div 显示（长按会弹系统复制菜单），用 textContent 赋值避免 HTML 被转义/注入
+    sheet.querySelector('#shareJsonBox').textContent = json;
 
     const close = () => {
         overlay.remove();
@@ -1175,12 +1175,27 @@ function openShareSheet(json) {
     overlay.addEventListener('click', close);
     sheet.querySelector('.sheet-cancel').addEventListener('click', close);
 
-    // 一键全选：选中后可长按/点系统「复制」
-    sheet.querySelector('#shareSelectAll').addEventListener('click', () => {
-        ta.focus();
-        ta.select();
-        ta.setSelectionRange(0, ta.value.length);
-        showToast('已全选，点输入框上方「拷贝」即可', 'success');
+    // 一键复制：hidden textarea + execCommand('copy') —— 移动端最稳的组合
+    sheet.querySelector('#shareCopyBtn').addEventListener('click', () => {
+        try {
+            const ta = document.createElement('textarea');
+            ta.value = json;
+            ta.setAttribute('readonly', '');
+            ta.style.position = 'fixed';
+            ta.style.left = '-9999px';
+            ta.style.top = '-9999px';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.focus();
+            ta.select();
+            ta.setSelectionRange(0, ta.value.length);
+            const ok = document.execCommand('copy');
+            document.body.removeChild(ta);
+            if (ok) showToast('✅ 已复制到剪贴板', 'success');
+            else showToast('❌ 复制失败，请长按文字手动复制', 'error');
+        } catch (e) {
+            showToast('❌ 复制失败，请长按文字手动复制', 'error');
+        }
     });
 }
 

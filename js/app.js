@@ -570,6 +570,9 @@ function renderCharacterAvatar(el, char) {
 
 // ---------- 人物设定表单 ----------
 function initCharacterForm() {
+    // ✨ AI 帮我设定角色 —— 一句话生成
+    document.getElementById('aiGenCharBtn').addEventListener('click', openAiGenSheet);
+
     // 保存按钮
     document.getElementById('saveCharBtn').addEventListener('click', () => {
         const name = document.getElementById('charName').value.trim();
@@ -1163,6 +1166,185 @@ function openShareSheet(json) {
 }
 
 // ---------- 导入角色（页面内粘贴框，兼容各种字段名/杂字） ----------
+// ---------- AI 帮我设定角色（一句话生成所有字段） ----------
+function openAiGenSheet() {
+    const overlay = document.createElement('div');
+    overlay.className = 'sheet-overlay';
+
+    const sheet = document.createElement('div');
+    sheet.className = 'sheet';
+    sheet.innerHTML = `
+        <div class="sheet-handle"></div>
+        <div class="sheet-title">✨ AI 帮我设定角色</div>
+        <div class="sheet-sub">用一句话描述你想要的角色，比如：「一个温柔又有点腹黑的古代女医官」</div>
+        <textarea class="import-json-box" id="aiGenInput" rows="3" placeholder="例：一个2000年的女高中生，外表乖但内心毒舌，喜欢画画，成绩很好"></textarea>
+        <div class="sheet-row">
+            <div class="sheet-row-item">
+                <label class="ai-gen-label">年龄段</label>
+                <select class="ai-gen-select" id="aiGenAge">
+                    <option value="">AI 自己定</option>
+                    <option value="child">孩童 (0-12)</option>
+                    <option value="teen">少年 (13-17)</option>
+                    <option value="young">青年 (18-29)</option>
+                    <option value="adult">壮年 (30-49)</option>
+                    <option value="middle">中年 (50-64)</option>
+                    <option value="senior">老年 (65+)</option>
+                </select>
+            </div>
+            <div class="sheet-row-item">
+                <label class="ai-gen-label">内容分级</label>
+                <select class="ai-gen-select" id="aiGenRating">
+                    <option value="all">G · 全年龄</option>
+                    <option value="r14">R14</option>
+                    <option value="r16">R16</option>
+                    <option value="r18">R18</option>
+                    <option value="r20">R20</option>
+                    <option value="r23">R23</option>
+                </select>
+            </div>
+        </div>
+        <div class="sheet-tip" id="aiGenErr" style="display:none;color:#f56565;"></div>
+        <button class="sheet-item" id="aiGenDoBtn">✨ 让 AI 帮我填好</button>
+        <button class="sheet-cancel">取消</button>
+    `;
+
+    document.body.appendChild(overlay);
+    document.body.appendChild(sheet);
+
+    const close = () => {
+        overlay.remove();
+        sheet.remove();
+        document.removeEventListener('keydown', onKey);
+    };
+    const onKey = (ev) => { if (ev.key === 'Escape') close(); };
+    document.addEventListener('keydown', onKey);
+    overlay.addEventListener('click', close);
+    sheet.querySelector('.sheet-cancel').addEventListener('click', close);
+
+    const btn = sheet.querySelector('#aiGenDoBtn');
+    const errBox = sheet.querySelector('#aiGenErr');
+
+    btn.addEventListener('click', async () => {
+        errBox.style.display = 'none';
+        const desc = sheet.querySelector('#aiGenInput').value.trim();
+        if (!desc) {
+            errBox.style.display = 'block';
+            errBox.textContent = '请先写一句对角色的描述';
+            return;
+        }
+        if (!State.api.baseUrl || !State.api.apiKey) {
+            errBox.style.display = 'block';
+            errBox.textContent = '请先去「⚙️ API」页面配置接口';
+            return;
+        }
+        const ageFixed = sheet.querySelector('#aiGenAge').value;
+        const ratingFixed = sheet.querySelector('#aiGenRating').value;
+
+        btn.disabled = true;
+        btn.textContent = '⏳ AI 正在构思...';
+        try {
+            const d = await aiGenerateCharacter(desc, ageFixed, ratingFixed);
+            // 回填表单
+            document.getElementById('charName').value = d.name || '';
+            document.getElementById('charIdentity').value = d.identity || '';
+            document.getElementById('charAgeGroup').value = d.ageGroup || (ageFixed || 'young');
+            document.getElementById('charRating').value = d.rating || ratingFixed;
+            document.getElementById('charPersonality').value = d.personality || '';
+            document.getElementById('charBackground').value = d.background || '';
+            document.getElementById('charGreeting').value = d.greeting || '';
+            // AI 不生成头像，让用户自己选
+            pendingCustomAvatar = '';
+            window.__charFormMode = 'new';
+            window.__charFormEditId = null;
+            close();
+            showToast('✨ 已填好，请检查后点保存', 'success');
+        } catch (e) {
+            errBox.style.display = 'block';
+            errBox.textContent = '生成失败：' + (e.message || e);
+        } finally {
+            btn.disabled = false;
+            btn.textContent = '✨ 让 AI 帮我填好';
+        }
+    });
+}
+
+// 独立的 AI 生成角色调用（不走 sendRequest，不带任何角色上下文）
+async function aiGenerateCharacter(desc, ageFixed, ratingFixed) {
+    const url = `${State.api.baseUrl.replace(/\/$/, '')}/chat/completions`;
+    const ageHint = ageFixed ? `（年龄阶段强制为 ${ageFixed}）` : '';
+    const ratingHint = ratingFixed ? `（内容分级强制为 ${ratingFixed}）` : '';
+
+    const prompt = `请根据下面的描述，构思一个完整的角色扮演角色，并只输出一段严格的 JSON 对象，不要输出任何额外的解释、代码块标记或前后缀：
+
+角色描述：${desc}${ageHint}${ratingHint}
+
+JSON 必须包含以下字段（全部为字符串）：
+{
+  "name": "角色名字（2-4字中文，不姓也可以，起个有辨识度的名字）",
+  "identity": "身份/职业（20字内，例：古代女医官 / 高中生 / 海盗船长）",
+  "ageGroup": "孩童|少年|青年|壮年|中年|老年",
+  "rating": "all|r14|r16|r18|r20|r23",
+  "personality": "性格特点（2-3句，描述说话语气、脾气、喜好）",
+  "background": "背景故事（3-5句，交代出身、经历、现在的处境）",
+  "greeting": "TA 跟用户打招呼的第一句话（可以用 *动作描写*，例：*微微一笑* 你好呀，今天想聊点什么？）"
+}
+
+内容安全底线：
+- 若角色年龄段为孩童(0-12)或少年(13-17)，rating 一律为 "all"（强制全年龄）
+- 绝不生成未成年人的性化内容或暗示
+- 绝不生成违法内容
+
+只输出 JSON，不要任何额外文字，不要用 \`\`\`json 包裹。`;
+
+    let resp;
+    try {
+        resp = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${State.api.apiKey}`
+            },
+            body: JSON.stringify({
+                model: State.api.model,
+                messages: [
+                    { role: 'system', content: '你是角色设定师，只输出合法 JSON，绝不输出任何 JSON 之外的文字。' },
+                    { role: 'user', content: prompt }
+                ],
+                temperature: 0.8,
+                stream: false,
+                response_format: { type: 'json_object' }
+            })
+        });
+    } catch (e) {
+        throw new Error('网络错误：' + e.message);
+    }
+
+    if (!resp.ok) {
+        let txt = '';
+        try { txt = await resp.text(); } catch {}
+        throw new Error(`API 返回 ${resp.status}：${txt.slice(0, 120)}`);
+    }
+    const j = await resp.json();
+    let content = (j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '';
+    content = content.trim();
+
+    // 宽容解析：去掉可能的代码块标记，截取 { ... } 本体
+    content = content.replace(/^\s*```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '');
+    const st = content.indexOf('{'), en = content.lastIndexOf('}');
+    if (st >= 0 && en > st) content = content.slice(st, en + 1);
+
+    let obj;
+    try {
+        obj = JSON.parse(content);
+    } catch (e) {
+        throw new Error('AI 返回格式不是合法 JSON，请再试一次');
+    }
+    if (!obj || typeof obj !== 'object') throw new Error('AI 返回了奇怪的东西');
+    if (!obj.name) throw new Error('AI 没能给角色起名字，描述再具体点试试');
+
+    return obj;
+}
+
 function openImportSheet() {
     const overlay = document.createElement('div');
     overlay.className = 'sheet-overlay';

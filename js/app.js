@@ -960,7 +960,8 @@ ${RATING_SAFETY_RULE}
 
     const fullMessages = [
         { role: 'system', content: systemPrompt },
-        ...messages.filter(m => m.role === 'user' || m.role === 'assistant')
+        // 🔴 过滤 __uiOnly 的 fake user，绝不带给 API（防止污染 history）
+        ...messages.filter(m => (m.role === 'user' || m.role === 'assistant') && !m.__uiOnly)
     ];
 
     const url = `${State.api.baseUrl}/chat/completions`;
@@ -1574,17 +1575,6 @@ async function sendMessage() {
         return;
     }
 
-    // ✅ 用户真的发消息了，清掉"让 TA 继续"残留的 fake user
-    State.__pendingFakeUser = null;
-    const activeId = State.activeCharacterId;
-    if (activeId && State.conversations[activeId]) {
-        // 🔴 原地操作，不换引用
-        const arr = State.conversations[activeId];
-        for (let i = arr.length - 1; i >= 0; i--) {
-            if (arr[i] && arr[i].__uiOnly) arr.splice(i, 1);
-        }
-    }
-
     if (!State.api.baseUrl) {
         showToast('请先在「API」配置接口', 'error');
         switchToTab('settings');
@@ -1719,7 +1709,6 @@ async function continueChat() {
 
     try {
         // 🔴 第一步：让 AI 先扮演"我"（user），想一句自然接话
-        //    注意：这个 fake user 绝对不能 push 进 msgs，否则污染 history
         let fakeUserSaid = '';
         try {
             fakeUserSaid = (await sendRequest(
@@ -1728,14 +1717,14 @@ async function continueChat() {
                 '现在对话安静了。假设你是正在和这个角色聊天的那个人（用户），请以用户的视角自然地说一句接下去的话。一句话就行，不要加动作描写，不要说"嗯"、"好的"这类太敷衍的。直接输出你要说的话，不要解释。'
             )).trim();
         } catch (e) {
-            // 第一次失败不致命，降级为单 TA 回复
             console.warn('fake user 生成失败，降级单 TA 回复:', e);
         }
 
         // 🔴 第二步：让 TA 回复——如果有 fake user 就基于它回，没有就主动说
         let aiReply = '';
         if (fakeUserSaid) {
-            // 构造临时数组，不碰 State.conversations！
+            // 构造临时数组给 API（fake user 带 __uiOnly 会被 sendRequest 过滤掉，
+            // 所以必须把 __uiOnly 剥掉才能让 TA 基于它回）
             const msgsForApi = [...msgs, { role: 'user', content: fakeUserSaid }];
             aiReply = (await sendRequest(
                 msgsForApi,
@@ -1743,7 +1732,6 @@ async function continueChat() {
                 `你的对话对象刚对你说了这句话：「${fakeUserSaid}」\n请你以角色口吻自然地回应它。台词 + *动作描写*，像平时回复那样。`
             )).trim();
         } else {
-            // 降级：直接让 TA 主动接一句
             aiReply = (await sendRequest(
                 msgs,
                 undefined,
@@ -1760,9 +1748,14 @@ async function continueChat() {
             showToast('❌ AI 没返回内容，请再点一次', 'error');
         }
 
-        // 🔴 fake user 只挂 State.__pendingFakeUser（纯内存、纯 DOM）
-        //    绝对不 push msgs！不存 localStorage！不污染 history！
-        State.__pendingFakeUser = fakeUserSaid || null;
+        // 🔴 fake user push 进 msgs 但带 __uiOnly 标记：
+        //    - renderMessages 正常渲染（像真消息一样显示）
+        //    - sendRequest 过滤掉（不会被 TA 下次看到）
+        //    - saveToStorage 过滤掉（不会存 localStorage）
+        //    = 永久显示在 DOM 里，但永不进 history/API
+        if (fakeUserSaid) {
+            msgs.push({ role: 'user', content: fakeUserSaid, __uiOnly: true });
+        }
 
         saveToStorage();
         renderMessages();
@@ -1954,27 +1947,6 @@ function renderMessages() {
         } else {
             // 全部渲染完毕
             State.__renderingBatch = false;
-
-            // 🔴 插入 fake user（UI-only，不进 msgs）：
-            //    找最后一条 AI 消息，把 fake user 插在它前面，这样最后一条始终是 TA
-            //    ⚠️ 插完不清 __pendingFakeUser！让它持续存在直到用户真发消息（sendMessage 开头清理）。
-            //       否则切 tab / 新 renderMessages 会把 fake user 搞丢。
-            if (State.__pendingFakeUser) {
-                const children = Array.from(container.children);
-                let lastAI = null;
-                for (let i = children.length - 1; i >= 0; i--) {
-                    if (children[i].classList?.contains('message') && children[i].classList?.contains('ai')) {
-                        lastAI = children[i];
-                        break;
-                    }
-                }
-                const fakeEl = createMessageDiv('user', State.__pendingFakeUser, -1, null);
-                if (lastAI) {
-                    container.insertBefore(fakeEl, lastAI);
-                } else {
-                    container.appendChild(fakeEl);
-                }
-            }
 
             const last = container.lastElementChild;
             if (last && last.classList) last.classList.add('msg-in');

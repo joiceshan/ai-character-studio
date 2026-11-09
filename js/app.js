@@ -909,7 +909,7 @@ async function rawTestConnection() {
     }
 }
 
-async function sendRequest(messages, temperature, extraInstruction) {
+async function sendRequest(messages, temperature, extraInstruction, responseFormat) {
     if (!State.api.baseUrl || !State.api.apiKey) {
         throw new Error('请先在「API」页面配置接口');
     }
@@ -951,6 +951,14 @@ ${RATING_SAFETY_RULE}
     ];
 
     const url = `${State.api.baseUrl}/chat/completions`;
+    const body = {
+        model: State.api.model,
+        messages: fullMessages,
+        temperature: temperature ?? State.api.temperature,
+        stream: false
+    };
+    if (responseFormat) body.response_format = responseFormat;
+
     let response;
     try {
         response = await fetch(url, {
@@ -959,12 +967,7 @@ ${RATING_SAFETY_RULE}
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${State.api.apiKey}`
             },
-            body: JSON.stringify({
-                model: State.api.model,
-                messages: fullMessages,
-                temperature: temperature ?? State.api.temperature,
-                stream: false
-            })
+            body: JSON.stringify(body)
         });
     } catch (networkErr) {
         throw new Error('网络错误（可能是 CORS 或无法连接）: ' + networkErr.message);
@@ -1649,24 +1652,25 @@ async function continueChat() {
         // 把欢迎语也带进上下文，让 AI 基于它接下一句
     }
 
-    const instruction = `现在的对话安静了，请你续写接下来的两条消息，让对话有来有回（两边都要有）：
+    const instruction = `现在对话安静了。请你以这个角色的口吻，续写接下来的两条消息：你先开口说一句，然后假设"对话另一方"会自然回应你一句，把这两句都一起输出。
 
-{
-  "ai": "你（角色）主动说的下一句话，可以用 *动作描写* / *神态* 表现，不要自我介绍，不要说'好的'之类的客套",
-  "user": "对话另一方（用户）听到后，会自然回应的一句话。要符合人设、口语化、简短（10-25字），像真人聊天，可以提问或接话"
-}
+⚠️ 输出格式是硬性要求，必须严格遵守：
+只输出一个 JSON 对象，包含两个字符串字段：
+{"ai": "你（角色）主动说的台词，可带 *动作描写*", "user": "对话另一方听到后自然回应的一句话"}
 
-要求：
-- 两条要能自然衔接，user 那条是在回应 ai 那条
-- ai 那条保持你原来的语气、节奏和当前话题，不要跳戏
-- 只输出严格 JSON，不要任何额外文字`;
+- ai 那条保持你原来的语气，1-2句自然台词，可带动作神态
+- user 那条要像真人听到 ai 的话之后会说的，简短口语，10-30字
+- 两条要能自然衔接，user 是在回应 ai
+- 输出里绝对不能有 \`\`\`json、解释性文字、前后缀，直接就是 { ... }
+
+示例：{"ai": "*指尖敲了敲桌面* 那幅画你真不想要？", "user": "想得美，拿走就别指望我还给你"}`;
 
     State.sending = true;
     setSendingUI(true);
     const typingEl = addTypingIndicator();
 
     try {
-        const reply = await sendRequest(msgs, undefined, instruction);
+        const reply = await sendRequest(msgs, undefined, instruction, { type: 'json_object' });
         typingEl.remove();
 
         // 尝试解析 {ai, user} 结构；失败就退化成单纯一条 AI 回复

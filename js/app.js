@@ -1758,7 +1758,18 @@ function renderMessages() {
     ).length;
 
     // 角色没变 + DOM 数量等于目标 → 可能只是最后一条换了内容，补动画就好
-    if (!charChanged && currentCount === finalSlice.length && currentCount > 0 && finalSkipped === 0) {
+    // 🔴 额外：必须比对 DOM 最后一条文本和消息列表最后一条文本，防止「AI 继续对话」时
+    // typing indicator 临时占位 + WINDOW 上限导致 currentCount 刚好等于目标长度，
+    // 触发短路把 AI 新回复吞掉
+    let domLastText = '';
+    const domLastMsg = container.querySelector('.message:last-child');
+    if (domLastMsg) {
+        const c = domLastMsg.querySelector('.msg-content');
+        domLastText = (c ? c.textContent : '').trim();
+    }
+    const msgLastText = (finalSlice[finalSlice.length - 1]?.content || '').trim();
+    if (!charChanged && currentCount === finalSlice.length && currentCount > 0 && finalSkipped === 0
+        && domLastText === msgLastText) {
         const last = container.lastElementChild;
         if (last && last.classList) last.classList.add('msg-in');
         if (State.__refreshFab) State.__refreshFab();

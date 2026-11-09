@@ -1718,22 +1718,51 @@ async function continueChat() {
     const typingEl = addTypingIndicator();
 
     try {
-        // ✅ 最简方案：只让 TA 继续说一句，保证最稳定
-        // 不再搞 fake user / 三行脚本 / 两次调用那一套——之前的复杂逻辑容易出错导致页面卡死
-        const instruction = '现在对话安静了。请你以角色口吻自然地主动接下一句话，继续之前的对话语境。台词 + *动作描写*，像平时回复那样，不要说"好的"之类的客套。';
+        // 🔴 第一步：让 AI 先扮演"我"（user），想一句自然接话
+        //    注意：这个 fake user 绝对不能 push 进 msgs，否则污染 history
+        let fakeUserSaid = '';
+        try {
+            fakeUserSaid = (await sendRequest(
+                msgs,
+                undefined,
+                '现在对话安静了。假设你是正在和这个角色聊天的那个人（用户），请以用户的视角自然地说一句接下去的话。一句话就行，不要加动作描写，不要说"嗯"、"好的"这类太敷衍的。直接输出你要说的话，不要解释。'
+            )).trim();
+        } catch (e) {
+            // 第一次失败不致命，降级为单 TA 回复
+            console.warn('fake user 生成失败，降级单 TA 回复:', e);
+        }
 
-        const aiReply = await sendRequest(msgs, undefined, instruction);
+        // 🔴 第二步：让 TA 回复——如果有 fake user 就基于它回，没有就主动说
+        let aiReply = '';
+        if (fakeUserSaid) {
+            // 构造临时数组，不碰 State.conversations！
+            const msgsForApi = [...msgs, { role: 'user', content: fakeUserSaid }];
+            aiReply = (await sendRequest(
+                msgsForApi,
+                undefined,
+                `你的对话对象刚对你说了这句话：「${fakeUserSaid}」\n请你以角色口吻自然地回应它。台词 + *动作描写*，像平时回复那样。`
+            )).trim();
+        } else {
+            // 降级：直接让 TA 主动接一句
+            aiReply = (await sendRequest(
+                msgs,
+                undefined,
+                '现在对话安静了。请你以角色口吻自然地主动接下一句话，继续之前的对话语境。台词 + *动作描写*，像平时回复那样，不要说"好的"之类的客套。'
+            )).trim();
+        }
+
         typingEl.remove();
 
-        const aiSaid = (aiReply || '').trim();
-        if (aiSaid) {
-            msgs.push({ role: 'assistant', content: aiSaid });
+        // 🔴 aiReply 正常 push msgs（进 history，存 localStorage）
+        if (aiReply) {
+            msgs.push({ role: 'assistant', content: aiReply });
         } else {
             showToast('❌ AI 没返回内容，请再点一次', 'error');
         }
 
-        // ✅ 清掉任何残留的 __pendingFakeUser，保证 UI 干净
-        State.__pendingFakeUser = null;
+        // 🔴 fake user 只挂 State.__pendingFakeUser（纯内存、纯 DOM）
+        //    绝对不 push msgs！不存 localStorage！不污染 history！
+        State.__pendingFakeUser = fakeUserSaid || null;
 
         saveToStorage();
         renderMessages();
@@ -1925,6 +1954,26 @@ function renderMessages() {
         } else {
             // 全部渲染完毕
             State.__renderingBatch = false;
+
+            // 🔴 插入 fake user（UI-only，不进 msgs）：
+            //    找最后一条 AI 消息，把 fake user 插在它前面，这样最后一条始终是 TA
+            if (State.__pendingFakeUser) {
+                const children = Array.from(container.children);
+                let lastAI = null;
+                for (let i = children.length - 1; i >= 0; i--) {
+                    if (children[i].classList?.contains('message') && children[i].classList?.contains('ai')) {
+                        lastAI = children[i];
+                        break;
+                    }
+                }
+                const fakeEl = createMessageDiv('user', State.__pendingFakeUser, -1, null);
+                if (lastAI) {
+                    container.insertBefore(fakeEl, lastAI);
+                } else {
+                    container.appendChild(fakeEl);
+                }
+                State.__pendingFakeUser = null;
+            }
 
             const last = container.lastElementChild;
             if (last && last.classList) last.classList.add('msg-in');

@@ -102,22 +102,29 @@ function saveToStorage() {
 function __doSaveToStorage() {
     try {
         // ✅ 过滤掉 __uiOnly 标记的消息（"让 TA 继续"生成的 fake user 不入 storage）
+        // 🔴 关键：原地操作，绝不替换数组引用！否则 sendMessage 里握着老引用的 msgs
+        //    在 saveToStorage 定时器触发后会把 AI 回复 push 到老数组，丢失新引用上的数据。
         const convs = State.conversations || {};
         Object.keys(convs).forEach(id => {
-            const arr = convs[id] || [];
-            const filtered = arr.filter(m => !m || !m.__uiOnly);
-            convs[id] = filtered.map(m => {
-                if (m && '__uiOnly' in m) { const { __uiOnly, ...rest } = m; return rest; }
-                return m;
-            });
+            const arr = convs[id];
+            if (!arr || !Array.isArray(arr)) return;
+            // 原地 filter：找到所有 __uiOnly 的，用 splice 删除
+            for (let i = arr.length - 1; i >= 0; i--) {
+                if (arr[i] && arr[i].__uiOnly) arr.splice(i, 1);
+            }
+            // 原地 strip __uiOnly 属性（防御性：如果有残留的）
+            for (let i = 0; i < arr.length; i++) {
+                if (arr[i] && '__uiOnly' in arr[i]) delete arr[i].__uiOnly;
+            }
         });
 
         // 对话归档：每个角色超过 MAX_ACTIVE_MSGS_PER_CHAR 的老消息挪到单独 key
+        // 🔴 同样原地操作，保留原数组引用
         Object.keys(convs).forEach(id => {
-            const arr = convs[id] || [];
+            const arr = convs[id];
+            if (!arr || !Array.isArray(arr)) return;
             if (arr.length > MAX_ACTIVE_MSGS_PER_CHAR) {
                 const keep = MAX_ACTIVE_MSGS_PER_CHAR;
-                const tail = arr.slice(-keep);
                 const head = arr.slice(0, arr.length - keep);
 
                 // 合并老的归档
@@ -126,7 +133,8 @@ function __doSaveToStorage() {
                 archive = archive.concat(head).slice(-500);  // 归档上限 500，防止越存越大
                 localStorage.setItem('ai_conversation_archive_' + id, JSON.stringify(archive));
 
-                convs[id] = tail;
+                // 原地截断：保留最后 keep 条，不换引用
+                arr.splice(0, arr.length - keep);
             }
         });
 
@@ -1527,13 +1535,19 @@ function openClearSheet() {
                 }
             } else if (action === 'onlyAi') {
                 if (confirm('确定删除所有 AI 回复，保留你的消息？')) {
-                    State.conversations[id] = cur.filter(m => m.role !== 'assistant');
+                    // 🔴 原地操作，不换引用
+                    for (let i = cur.length - 1; i >= 0; i--) {
+                        if (cur[i].role === 'assistant') cur.splice(i, 1);
+                    }
                     modified = true;
                     showToast('AI 回复已清除', 'success');
                 }
             } else if (action === 'onlyUser') {
                 if (confirm('确定删除你发的所有消息，保留 AI 回复？')) {
-                    State.conversations[id] = cur.filter(m => m.role !== 'user');
+                    // 🔴 原地操作，不换引用
+                    for (let i = cur.length - 1; i >= 0; i--) {
+                        if (cur[i].role === 'user') cur.splice(i, 1);
+                    }
                     modified = true;
                     showToast('你的消息已清除', 'success');
                 }
@@ -1569,7 +1583,11 @@ async function sendMessage() {
     State.__pendingFakeUser = null;
     const activeId = State.activeCharacterId;
     if (activeId && State.conversations[activeId]) {
-        State.conversations[activeId] = State.conversations[activeId].filter(m => !m || !m.__uiOnly);
+        // 🔴 原地操作，不换引用
+        const arr = State.conversations[activeId];
+        for (let i = arr.length - 1; i >= 0; i--) {
+            if (arr[i] && arr[i].__uiOnly) arr.splice(i, 1);
+        }
     }
 
     if (!State.api.baseUrl) {
@@ -1912,32 +1930,6 @@ function renderMessages() {
         } else {
             // 全部渲染完毕
             State.__renderingBatch = false;
-
-            // ✅ 插入 fake user：仅当有值时才处理，并加 try-catch 保护
-            try {
-                if (State.__pendingFakeUser) {
-                    const children = Array.from(container.children);
-                    let lastAI = null;
-                    for (let i = children.length - 1; i >= 0; i--) {
-                        const el = children[i];
-                        if (el.classList && el.classList.contains('message') && el.classList.contains('ai')) {
-                            lastAI = el;
-                            break;
-                        }
-                    }
-                    const fakeEl = createMessageDiv('user', State.__pendingFakeUser, -1, null);
-                    if (lastAI) {
-                        container.insertBefore(fakeEl, lastAI);
-                    } else {
-                        container.appendChild(fakeEl);
-                    }
-                    State.__pendingFakeUser = null;
-                }
-            } catch (fakeErr) {
-                // fake user 插入出错不应该影响主流程
-                State.__pendingFakeUser = null;
-                console.warn('fake user insert failed:', fakeErr);
-            }
 
             const last = container.lastElementChild;
             if (last && last.classList) last.classList.add('msg-in');

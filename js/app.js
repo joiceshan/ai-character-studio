@@ -1657,13 +1657,14 @@ async function continueChat() {
     const instruction = `现在对话安静了。请你以这个角色的口吻，续写接下来的两条消息：你先开口说一句，然后假设"对话另一方"会自然回应你一句，把这两句都一起输出。
 
 ⚠️ 输出格式是硬性要求，必须严格遵守：
-只输出一个 JSON 对象，包含两个字符串字段：
-{"ai": "你（角色）主动说的台词，可带 *动作描写*", "user": "对话另一方听到后自然回应的一句话"}
+**整个回复只能是一个 JSON 对象**，不能有任何 JSON 之外的文字、解释、前后缀、代码块标记。
+
+JSON 格式：{"ai": "你（角色）主动说的台词，可带 *动作描写*", "user": "对话另一方听到后自然回应的一句话"}
 
 - ai 那条保持你原来的语气，1-2句自然台词，可带动作神态
 - user 那条要像真人听到 ai 的话之后会说的，简短口语，10-30字
 - 两条要能自然衔接，user 是在回应 ai
-- 输出里绝对不能有 \`\`\`json、解释性文字、前后缀，直接就是 { ... }
+- **只回这一份 JSON，其他一个字都别写**
 
 示例：{"ai": "*指尖敲了敲桌面* 那幅画你真不想要？", "user": "想得美，拿走就别指望我还给你"}`;
 
@@ -1672,31 +1673,11 @@ async function continueChat() {
     const typingEl = addTypingIndicator();
 
     try {
-        // 先尝试带 response_format（严格 JSON），两种情况都自动降级：
-        // 1) API 报 400/不支持；2) API 200 但 content 空（DeepSeek-Flash 的 bug）
-        let reply = '', lastErrMsg = '';
-        let triedJsonFormat = false;
-        for (let attempt = 0; attempt < 2 && !reply.trim(); attempt++) {
-            try {
-                if (attempt === 0) {
-                    triedJsonFormat = true;
-                    reply = await sendRequest(msgs, undefined, instruction, { type: 'json_object' });
-                } else {
-                    // 第二次：去掉 response_format，普通格式
-                    reply = await sendRequest(msgs, undefined, instruction);
-                }
-            } catch (err) {
-                lastErrMsg = err.message || String(err);
-                // 只有错误信息里明显是 response_format 相关的才重试；其他错误直接抛
-                if (attempt === 0 && !lastErrMsg.match(/response.format|unsupported|不支持|400/)) {
-                    throw err;
-                }
-                reply = '';
-            }
-        }
+        // 🔧 直接发普通格式（response_format 在 DeepSeek-Flash 上有 bug，会返回空 content）
+        let reply = await sendRequest(msgs, undefined, instruction);
         typingEl.remove();
 
-        // 尝试解析 {ai, user} 结构
+        // 双重解析：先 JSON.parse → 失败再正则拆 "ai" / "user"
         let aiText = reply;
         let userText = '';
         const parsed = extractJsonObject(reply);
@@ -1704,18 +1685,15 @@ async function continueChat() {
             aiText = parsed.ai.trim();
             userText = (parsed.user || '').toString().trim();
         } else {
-            // 解析失败：再试一次正则拆 "ai":"..." "user":"..."
+            // 正则兜底：从文本里抠 ai / user 字段值
             const aiM = reply.match(/"ai"\s*:\s*"((?:[^"\\]|\\.)*)"/);
             const uM = reply.match(/"user"\s*:\s*"((?:[^"\\]|\\.)*)"/);
-            if (aiM) aiText = JSON.parse('"' + aiM[1] + '"');
-            if (uM) userText = JSON.parse('"' + uM[1] + '"');
+            if (aiM) { try { aiText = JSON.parse('"' + aiM[1] + '"'); } catch {} }
+            if (uM) { try { userText = JSON.parse('"' + uM[1] + '"'); } catch {} }
         }
 
-        // 清理旧的调试气泡，新的就不加了
-        // （上一版 V42 的调试气泡会留在历史里，那是正常的历史记录）
-
-        msgs.push({ role: 'assistant', content: aiText || '(AI 没说话)' });
-        if (userText) msgs.push({ role: 'user', content: userText });
+        msgs.push({ role: 'assistant', content: aiText.trim() || '(AI 没说话)' });
+        if (userText.trim()) msgs.push({ role: 'user', content: userText.trim() });
 
         saveToStorage();
         renderMessages();

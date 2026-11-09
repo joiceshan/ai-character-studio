@@ -1592,6 +1592,23 @@ async function sendMessage() {
     }
 }
 
+// 从 AI 返回的文本里宽容提取 JSON 对象（去掉 ``` 代码块、截取 { ... }）
+function extractJsonObject(text) {
+    if (!text) return null;
+    let s = String(text).trim()
+        .replace(/^\s*```(?:json)?\s*/i, '')
+        .replace(/\s*```\s*$/, '');
+    const st = s.indexOf('{'), en = s.lastIndexOf('}');
+    if (st < 0 || en <= st) return null;
+    s = s.slice(st, en + 1);
+    try {
+        const o = JSON.parse(s);
+        return (o && typeof o === 'object') ? o : null;
+    } catch {
+        return null;
+    }
+}
+
 // 输入框和「帮我继续聊」按钮统一的 loading/禁用态
 function setSendingUI(sending) {
     const sendBtn = document.getElementById('sendBtn');
@@ -1632,7 +1649,17 @@ async function continueChat() {
         // 把欢迎语也带进上下文，让 AI 基于它接下一句
     }
 
-    const instruction = '现在对话暂时安静了，轮到你主动。请以你刚才的语气、节奏、话题，自然地说下一句话。可以问用户一个问题，也可以继续你自己的叙事。不要自我介绍、不要用"好的"之类的回应语，直接开口说台词 + 动作描写。';
+    const instruction = `现在的对话安静了，请你续写接下来的两条消息，让对话有来有回（两边都要有）：
+
+{
+  "ai": "你（角色）主动说的下一句话，可以用 *动作描写* / *神态* 表现，不要自我介绍，不要说'好的'之类的客套",
+  "user": "对话另一方（用户）听到后，会自然回应的一句话。要符合人设、口语化、简短（10-25字），像真人聊天，可以提问或接话"
+}
+
+要求：
+- 两条要能自然衔接，user 那条是在回应 ai 那条
+- ai 那条保持你原来的语气、节奏和当前话题，不要跳戏
+- 只输出严格 JSON，不要任何额外文字`;
 
     State.sending = true;
     setSendingUI(true);
@@ -1641,7 +1668,19 @@ async function continueChat() {
     try {
         const reply = await sendRequest(msgs, undefined, instruction);
         typingEl.remove();
-        msgs.push({ role: 'assistant', content: reply });
+
+        // 尝试解析 {ai, user} 结构；失败就退化成单纯一条 AI 回复
+        let aiText = reply;
+        let userText = '';
+        const parsed = extractJsonObject(reply);
+        if (parsed && typeof parsed.ai === 'string' && parsed.ai.trim()) {
+            aiText = parsed.ai.trim();
+            userText = (parsed.user || '').toString().trim();
+        }
+
+        msgs.push({ role: 'assistant', content: aiText });
+        if (userText) msgs.push({ role: 'user', content: userText });
+
         saveToStorage();
         renderMessages();
         scrollToBottom();

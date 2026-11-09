@@ -1957,6 +1957,8 @@ function renderMessages() {
 
             // 🔴 插入 fake user（UI-only，不进 msgs）：
             //    找最后一条 AI 消息，把 fake user 插在它前面，这样最后一条始终是 TA
+            //    ⚠️ 插完不清 __pendingFakeUser！让它持续存在直到用户真发消息（sendMessage 开头清理）。
+            //       否则切 tab / 新 renderMessages 会把 fake user 搞丢。
             if (State.__pendingFakeUser) {
                 const children = Array.from(container.children);
                 let lastAI = null;
@@ -1972,7 +1974,6 @@ function renderMessages() {
                 } else {
                     container.appendChild(fakeEl);
                 }
-                State.__pendingFakeUser = null;
             }
 
             const last = container.lastElementChild;

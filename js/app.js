@@ -1670,16 +1670,32 @@ async function continueChat() {
     const typingEl = addTypingIndicator();
 
     try {
-        const reply = await sendRequest(msgs, undefined, instruction, { type: 'json_object' });
+        // 先尝试带 response_format（严格 JSON），失败再降级
+        let reply;
+        try {
+            reply = await sendRequest(msgs, undefined, instruction, { type: 'json_object' });
+        } catch (firstErr) {
+            // 如果因为 response_format 不支持被 API 拒绝（常见于部分国产模型），就降级重试一次
+            if (String(firstErr.message || '').match(/response.format|unsupported|不支持|400/)) {
+                reply = await sendRequest(msgs, undefined, instruction);
+            } else {
+                throw firstErr;
+            }
+        }
         typingEl.remove();
 
-        // 尝试解析 {ai, user} 结构；失败就退化成单纯一条 AI 回复
+        // 尝试解析 {ai, user} 结构
         let aiText = reply;
         let userText = '';
         const parsed = extractJsonObject(reply);
         if (parsed && typeof parsed.ai === 'string' && parsed.ai.trim()) {
             aiText = parsed.ai.trim();
             userText = (parsed.user || '').toString().trim();
+        }
+
+        // 🔴 临时调试：如果还是只拿到一条，把 API 返回原文加到 error 气泡里方便排查
+        if (!userText) {
+            msgs.push({ role: 'error', content: '🔍 调试信息：API 没返回 JSON，只收到一条台词。原文预览：「' + String(reply || '').slice(0, 200) + '」' });
         }
 
         msgs.push({ role: 'assistant', content: aiText });

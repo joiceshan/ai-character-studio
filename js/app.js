@@ -83,43 +83,53 @@ function genId() {
 }
 
 // ---------- 本地存储 ----------
-// 存储防抖 + 归档：避免每次全量序列化把主线程卡爆
-const SAVE_DEBOUNCE_MS = 1800;
+// 🔴 saveToStorage 每次调用都是【同步立即写 localStorage】，零丢失窗口
+//    归档逻辑放到异步 setTimeout 里跑，不阻塞主线程
 const MAX_ACTIVE_MSGS_PER_CHAR = 80;   // 主 key 里每角色最多留这么多条，超出的归档
-let __saveTimer = null;
-let __savePending = false;
+let __archiveTimer = null;
 
 function saveToStorage() {
-    __savePending = true;
-    if (__saveTimer) return;  // 已经排队了就不再开新计时器
-    __saveTimer = setTimeout(() => {
-        __saveTimer = null;
-        __savePending = false;
-        __doSaveToStorage();
-    }, SAVE_DEBOUNCE_MS);
-}
-
-function __doSaveToStorage() {
     try {
-        // ✅ 过滤掉 __uiOnly 标记的消息（"让 TA 继续"生成的 fake user 不入 storage）
-        // 🔴 关键：原地操作，绝不替换数组引用！否则 sendMessage 里握着老引用的 msgs
-        //    在 saveToStorage 定时器触发后会把 AI 回复 push 到老数组，丢失新引用上的数据。
         const convs = State.conversations || {};
+
+        // 过滤 __uiOnly 标记的消息（原地操作，绝不换引用！）
         Object.keys(convs).forEach(id => {
             const arr = convs[id];
             if (!arr || !Array.isArray(arr)) return;
-            // 原地 filter：找到所有 __uiOnly 的，用 splice 删除
             for (let i = arr.length - 1; i >= 0; i--) {
                 if (arr[i] && arr[i].__uiOnly) arr.splice(i, 1);
             }
-            // 原地 strip __uiOnly 属性（防御性：如果有残留的）
-            for (let i = 0; i < arr.length; i++) {
-                if (arr[i] && '__uiOnly' in arr[i]) delete arr[i].__uiOnly;
-            }
         });
 
-        // 对话归档：每个角色超过 MAX_ACTIVE_MSGS_PER_CHAR 的老消息挪到单独 key
-        // 🔴 同样原地操作，保留原数组引用
+        const chars = State.characters.map(c => ({ ...c }));
+
+        // 🔴 同步立即写入，保证每次 push 后数据立刻落盘
+        localStorage.setItem('ai_characters', JSON.stringify(chars));
+        localStorage.setItem('ai_active_character', State.activeCharacterId || '');
+        localStorage.setItem('ai_conversations', JSON.stringify(convs));
+        localStorage.setItem('ai_api', JSON.stringify(State.api));
+
+        refreshWriteCharSelect();
+
+        // 异步归档：有角色超过 MAX 条时才排队（不紧急）
+        let needArchive = false;
+        Object.keys(convs).forEach(id => {
+            if (convs[id] && convs[id].length > MAX_ACTIVE_MSGS_PER_CHAR) needArchive = true;
+        });
+        if (needArchive && !__archiveTimer) {
+            __archiveTimer = setTimeout(() => {
+                __archiveTimer = null;
+                __doArchive();
+            }, 2000);
+        }
+    } catch (e) {
+        console.warn('保存失败:', e);
+    }
+}
+
+function __doArchive() {
+    try {
+        const convs = State.conversations || {};
         Object.keys(convs).forEach(id => {
             const arr = convs[id];
             if (!arr || !Array.isArray(arr)) return;
@@ -127,34 +137,19 @@ function __doSaveToStorage() {
                 const keep = MAX_ACTIVE_MSGS_PER_CHAR;
                 const head = arr.slice(0, arr.length - keep);
 
-                // 合并老的归档
                 let archive = [];
                 try { archive = JSON.parse(localStorage.getItem('ai_conversation_archive_' + id) || '[]'); } catch {}
-                archive = archive.concat(head).slice(-500);  // 归档上限 500，防止越存越大
+                archive = archive.concat(head).slice(-500);  // 归档上限 500
                 localStorage.setItem('ai_conversation_archive_' + id, JSON.stringify(archive));
 
-                // 原地截断：保留最后 keep 条，不换引用
+                // 原地截断，保留原数组引用
                 arr.splice(0, arr.length - keep);
             }
         });
-
-        // 角色头像压缩：customAvatar 如果是 base64 且太长，存之前留个小缩略图标记
-        const chars = State.characters.map(c => {
-            const copy = { ...c };
-            if (copy.customAvatar && copy.customAvatar.length > 80000) {
-                // 太长的头像存之前先标记下（用户编辑时会重新上传，这里先保留原值）
-                // 80KB 以上的 base64 写 localStorage 很慢，但不丢数据
-            }
-            return copy;
-        });
-
-        localStorage.setItem('ai_characters', JSON.stringify(chars));
-        localStorage.setItem('ai_active_character', State.activeCharacterId || '');
+        // 归档后再同步存一次截断后的 convs
         localStorage.setItem('ai_conversations', JSON.stringify(convs));
-        localStorage.setItem('ai_api', JSON.stringify(State.api));
-        refreshWriteCharSelect();
     } catch (e) {
-        console.warn('保存失败:', e);
+        console.warn('归档失败:', e);
     }
 }
 
@@ -295,12 +290,12 @@ document.addEventListener('DOMContentLoaded', () => {
     initFontSize();
     updateUI();
 
-    // 页面切后台/关闭时强制把防抖的 save flush 掉，防止丢数据
+    // 页面切后台/关闭时：如果归档定时器在排队，立即执行（主保存已经同步落盘了）
     const flushSave = () => {
-        if (__saveTimer) {
-            clearTimeout(__saveTimer);
-            __saveTimer = null;
-            __doSaveToStorage();
+        if (__archiveTimer) {
+            clearTimeout(__archiveTimer);
+            __archiveTimer = null;
+            __doArchive();
         }
     };
     document.addEventListener('visibilitychange', () => {

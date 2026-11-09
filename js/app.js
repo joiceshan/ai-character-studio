@@ -1693,11 +1693,9 @@ async function continueChat() {
         const aiReply = await sendRequest(msgs, undefined, instruction1);
 
         // ============ 调用 2：AI 模拟"用户"回应刚说的那句话 ============
-        // system prompt 切换成"你是对话另一方"，并且把角色刚说的那句话作为新的上下文
         const aiSaid = (aiReply || '').trim();
         let userReply = '';
         if (aiSaid) {
-            // 构建一个临时的 system prompt：让 AI 模拟用户
             const userSimPrompt = `你现在**不再扮演之前的角色**，而是扮演正在和那个角色聊天的「对话另一方」（就是屏幕前的真人用户）。
 
 刚才那个角色对你说了：
@@ -1710,15 +1708,47 @@ ${aiSaid}
 - 可以接话、可以反问、可以吐槽，符合正常人际对话
 - **只输出这一句台词本身**，不要加动作描写、不要加引号、不要解释`;
 
-            // 用 sendRequest 的 extraInstruction 路径，但注意 system prompt 里的角色设定会先构建
-            // 所以我们绕过 sendRequest，直接发一次 API，只带模拟用户的 prompt
-            userReply = await sendRawUserSimRequest(userSimPrompt);
+            // 🔧 调试：手动发一次，拿到完整 raw 响应
+            try {
+                const resp = await fetch(`${State.api.baseUrl}/chat/completions`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${State.api.apiKey}`
+                    },
+                    body: JSON.stringify({
+                        model: State.api.model,
+                        messages: [{ role: 'user', content: userSimPrompt }],
+                        temperature: State.api.temperature ?? 0.7,
+                        stream: false
+                    })
+                });
+                const rawText = await resp.text();
+                if (resp.ok) {
+                    try {
+                        const data = JSON.parse(rawText);
+                        userReply = (data.choices?.[0]?.message?.content || '').trim();
+                    } catch {}
+                }
+
+                // 🔴 调试：如果还是空，push 一个调试气泡（用 error role）
+                if (!userReply) {
+                    msgs.push({ role: 'error', content: '🔍 第二次调用返回空。HTTP:' + resp.status + ' raw前300字:' + rawText.slice(0, 300) });
+                }
+            } catch (fetchErr) {
+                msgs.push({ role: 'error', content: '🔍 第二次调用异常: ' + fetchErr.message });
+            }
         }
 
         typingEl.remove();
 
         if (aiSaid) msgs.push({ role: 'assistant', content: aiSaid });
-        if (userReply && userReply.trim()) msgs.push({ role: 'user', content: userReply.trim() });
+        if (userReply && userReply.trim()) {
+            msgs.push({ role: 'user', content: userReply.trim() });
+        } else if (aiSaid) {
+            // fallback：如果模拟用户失败，硬塞一条保底文本，保证右边有气泡
+            msgs.push({ role: 'user', content: '…… 嗯？然后呢？' });
+        }
 
         saveToStorage();
         renderMessages();

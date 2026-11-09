@@ -1750,20 +1750,15 @@ async function continueChat() {
 
         typingEl.remove();
 
-        // 🔴 aiReply 正常 push msgs（进 history，存 localStorage）
+        // 🔴 先 push fake user，再 push TA 回复——保证 TA 永远在最后一条
+        if (fakeUserSaid) {
+            msgs.push({ role: 'user', content: fakeUserSaid, __uiOnly: true });
+        }
+
         if (aiReply) {
             msgs.push({ role: 'assistant', content: aiReply });
         } else {
             showToast('❌ AI 没返回内容，请再点一次', 'error');
-        }
-
-        // 🔴 fake user push 进 msgs 但带 __uiOnly 标记：
-        //    - renderMessages 正常渲染（像真消息一样显示）
-        //    - sendRequest 过滤掉（不会被 TA 下次看到）
-        //    - saveToStorage 过滤掉（不会存 localStorage）
-        //    = 永久显示在 DOM 里，但永不进 history/API
-        if (fakeUserSaid) {
-            msgs.push({ role: 'user', content: fakeUserSaid, __uiOnly: true });
         }
 
         saveToStorage();

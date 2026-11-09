@@ -931,6 +931,55 @@ async function rawTestConnection() {
     }
 }
 
+// 不带角色 system prompt 的纯净请求——用于生成 fake user 等需要脱离角色口吻的场景
+async function sendRawRequest(messages, instruction) {
+    if (!State.api.baseUrl || !State.api.apiKey) {
+        throw new Error('请先在「API」页面配置接口');
+    }
+
+    const fullMessages = [
+        { role: 'system', content: '你是一个助手，负责生成自然的文字内容。' },
+        ...messages.filter(m => (m.role === 'user' || m.role === 'assistant') && !m.__uiOnly),
+        { role: 'user', content: instruction }
+    ];
+
+    const url = `${State.api.baseUrl}/chat/completions`;
+    const body = {
+        model: State.api.model,
+        messages: fullMessages,
+        temperature: State.api.temperature ?? 0.8,
+        stream: false
+    };
+
+    let response;
+    try {
+        response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${State.api.apiKey}`
+            },
+            body: JSON.stringify(body)
+        });
+    } catch (networkErr) {
+        throw new Error('网络错误: ' + networkErr.message);
+    }
+
+    const text = await response.text();
+    if (!response.ok) {
+        let detail = text;
+        try { const j = JSON.parse(text); detail = j.error?.message || j.message || text; } catch {}
+        throw new Error(`${response.status}: ${detail}`);
+    }
+
+    try {
+        const data = JSON.parse(text);
+        return data.choices?.[0]?.message?.content || '';
+    } catch {
+        throw new Error('响应格式异常: ' + text.slice(0, 100));
+    }
+}
+
 async function sendRequest(messages, temperature, extraInstruction, responseFormat) {
     if (!State.api.baseUrl || !State.api.apiKey) {
         throw new Error('请先在「API」页面配置接口');
@@ -1717,13 +1766,14 @@ async function continueChat() {
     const typingEl = addTypingIndicator();
 
     try {
-        // 🔴 第一步：让 AI 先扮演"我"（user），想一句自然接话
+        // 🔴 第一步：生成 fake user 消息——**不用角色 system prompt**！
+        //    角色 prompt 会让 AI 一直用角色口吻说话，即使让它"扮演 user"也会混。
+        //    单独用 sendRawRequest，纯自然语言 prompt。
         let fakeUserSaid = '';
         try {
-            fakeUserSaid = (await sendRequest(
+            fakeUserSaid = (await sendRawRequest(
                 msgs,
-                undefined,
-                '现在对话安静了。假设你是正在和这个角色聊天的那个人（用户），请以用户的视角自然地说一句接下去的话。一句话就行，不要加动作描写，不要说"嗯"、"好的"这类太敷衍的。直接输出你要说的话，不要解释。'
+                '现在你是一个正在和AI角色聊天的真人用户。下面是你和AI角色的历史对话，AI角色最后说了话，但你还没回应。请你以真实用户的身份、真实的口吻（普通、自然、像你自己说话那样，*不带*任何角色腔），接一句你会说的话。一句话就行，不要加动作描写，不要说"嗯"、"好的"这类太敷衍的。直接输出你要说的话，不要加引号不要解释。'
             )).trim();
         } catch (e) {
             console.warn('fake user 生成失败，降级单 TA 回复:', e);

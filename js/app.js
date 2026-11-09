@@ -1705,64 +1705,22 @@ async function continueChat() {
     const typingEl = addTypingIndicator();
 
     try {
-        // ✅ 一次 API 调用，让 AI 输出对话脚本，拆成 3 条气泡：TA 说 → 你（AI 模拟）说 → TA 再说
-        // 这样最后一条永远是 TA 那边，且只调用一次，没有 fake user 污染 history 的问题
-        const scriptPrompt = `现在对话安静了。请你以这个角色的口吻，继续对话。
-请输出一段 3 行的对话脚本，格式严格如下（每一行都以"TA说："或"你说："开头）：
+        // ✅ 最简方案：只让 TA 继续说一句，保证最稳定
+        // 不再搞 fake user / 三行脚本 / 两次调用那一套——之前的复杂逻辑容易出错导致页面卡死
+        const instruction = '现在对话安静了。请你以角色口吻自然地主动接下一句话，继续之前的对话语境。台词 + *动作描写*，像平时回复那样，不要说"好的"之类的客套。';
 
-TA说：（你的角色主动接下一句，可带 *动作描写*）
-你说：（对话另一方听到后会自然回应一句，15-30字，口语化）
-TA说：（你的角色再回应"你说"的那一句，可带 *动作描写*）
-
-⚠️ 严格要求：
-- 只输出这三行，不要解释、不要加引号、不要加```代码块标记
-- "TA说："是你的角色说的，"你说："是对话另一方（屏幕前的真人用户）会说的
-- 三行要能自然衔接，像真实对话
-- 每条台词 1-2 句自然语气`;
-
-        const scriptReply = await sendRequest(msgs, undefined, scriptPrompt);
+        const aiReply = await sendRequest(msgs, undefined, instruction);
         typingEl.remove();
 
-        // 解析三行
-        const scriptText = (scriptReply || '').trim();
-        const lines = scriptText.split(/\n+/).map(l => l.trim()).filter(Boolean);
-
-        const extracts = [];  // [{role: 'assistant'|'user', text: '...'}]
-        for (const line of lines) {
-            let m;
-            m = line.match(/^(?:TA\s*说\s*[:：]\s*)(.+)$/i);
-            if (m) { extracts.push({ role: 'assistant', text: m[1].trim() }); continue; }
-            m = line.match(/^(?:你\s*说\s*[:：]\s*)(.+)$/);
-            if (m) { extracts.push({ role: 'user', text: m[1].trim() }); continue; }
-            m = line.match(/^(?:我\s*说\s*[:：]\s*)(.+)$/);  // 有些模型会用"我说"代替"你说"
-            if (m) { extracts.push({ role: 'user', text: m[1].trim() }); continue; }
+        const aiSaid = (aiReply || '').trim();
+        if (aiSaid) {
+            msgs.push({ role: 'assistant', content: aiSaid });
+        } else {
+            showToast('❌ AI 没返回内容，请再点一次', 'error');
         }
 
-        // 如果完全没解析出来，fallback：把整段当 assistant 台词
-        if (extracts.length === 0) {
-            if (scriptText) extracts.push({ role: 'assistant', text: scriptText });
-        }
-
-        // 修正顺序：保证最后一条是 TA（assistant）
-        if (extracts.length > 0 && extracts[extracts.length - 1].role !== 'assistant') {
-            extracts.pop();
-        }
-
-        // 如果没 assistant，放弃
-        const hasAssistant = extracts.some(e => e.role === 'assistant');
-        if (!hasAssistant) {
-            showToast('❌ AI 没返回有效的继续对话脚本', 'error');
-            return;
-        }
-
-        // ✅ 把所有 assistant push 进 msgs（入 history），user 的只临时显示不入 history
-        const fakeUserText = extracts.find(e => e.role === 'user')?.text || null;
-        for (const e of extracts) {
-            if (e.role === 'assistant') {
-                msgs.push({ role: 'assistant', content: e.text });
-            }
-        }
-        State.__pendingFakeUser = fakeUserText;
+        // ✅ 清掉任何残留的 __pendingFakeUser，保证 UI 干净
+        State.__pendingFakeUser = null;
 
         saveToStorage();
         renderMessages();
@@ -1955,29 +1913,30 @@ function renderMessages() {
             // 全部渲染完毕
             State.__renderingBatch = false;
 
-            // ✅ 插入 fake user：找最后两条都是 assistant 的情况，插在它们之间
-            if (State.__pendingFakeUser) {
-                const children = Array.from(container.children);
-                let lastAI = null;   // 倒数第一个 assistant
-                let prevAI = null;   // 倒数第二个 assistant
-                for (let i = children.length - 1; i >= 0; i--) {
-                    const el = children[i];
-                    if (el.classList && el.classList.contains('message') && el.classList.contains('ai')) {
-                        if (!lastAI) lastAI = el;
-                        else { prevAI = el; break; }
+            // ✅ 插入 fake user：仅当有值时才处理，并加 try-catch 保护
+            try {
+                if (State.__pendingFakeUser) {
+                    const children = Array.from(container.children);
+                    let lastAI = null;
+                    for (let i = children.length - 1; i >= 0; i--) {
+                        const el = children[i];
+                        if (el.classList && el.classList.contains('message') && el.classList.contains('ai')) {
+                            lastAI = el;
+                            break;
+                        }
                     }
+                    const fakeEl = createMessageDiv('user', State.__pendingFakeUser, -1, null);
+                    if (lastAI) {
+                        container.insertBefore(fakeEl, lastAI);
+                    } else {
+                        container.appendChild(fakeEl);
+                    }
+                    State.__pendingFakeUser = null;
                 }
-                const fakeEl = createMessageDiv('user', State.__pendingFakeUser, -1, null);
-                if (prevAI && lastAI) {
-                    // 两个 assistant 都找到，插在它们之间（= 倒数第一个 assistant 之前）
-                    container.insertBefore(fakeEl, lastAI);
-                } else if (lastAI) {
-                    // 只找到一个 assistant，插在它前面
-                    container.insertBefore(fakeEl, lastAI);
-                } else {
-                    container.appendChild(fakeEl);
-                }
+            } catch (fakeErr) {
+                // fake user 插入出错不应该影响主流程
                 State.__pendingFakeUser = null;
+                console.warn('fake user insert failed:', fakeErr);
             }
 
             const last = container.lastElementChild;

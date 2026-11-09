@@ -92,29 +92,38 @@ function saveToStorage() {
     try {
         const convs = State.conversations || {};
 
-        // 过滤 __uiOnly 标记的消息（原地操作，绝不换引用！）
-        Object.keys(convs).forEach(id => {
-            const arr = convs[id];
-            if (!arr || !Array.isArray(arr)) return;
-            for (let i = arr.length - 1; i >= 0; i--) {
-                if (arr[i] && arr[i].__uiOnly) arr.splice(i, 1);
-            }
-        });
+        // 🔴 绝对不能原地 splice State.conversations！会把 fake user（__uiOnly）
+        //    从 live 数据里删掉，导致紧接着的 renderMessages 看不到它。
+        //    过滤只在写 localStorage 的拷贝上做。
 
         const chars = State.characters.map(c => ({ ...c }));
 
-        // 🔴 同步立即写入，保证每次 push 后数据立刻落盘
+        // 写 localStorage 时过滤掉 __uiOnly（深拷贝 + 过滤，不碰原数组）
+        const convsForStorage = {};
+        Object.keys(convs).forEach(id => {
+            const arr = convs[id];
+            if (!arr || !Array.isArray(arr)) { convsForStorage[id] = []; return; }
+            convsForStorage[id] = arr
+                .filter(m => !m || !m.__uiOnly)
+                .map(m => {
+                    if (!m) return m;
+                    const { __uiOnly, ...rest } = m;  // 剥掉标记
+                    return rest;
+                });
+        });
+
+        // 同步立即写入
         localStorage.setItem('ai_characters', JSON.stringify(chars));
         localStorage.setItem('ai_active_character', State.activeCharacterId || '');
-        localStorage.setItem('ai_conversations', JSON.stringify(convs));
+        localStorage.setItem('ai_conversations', JSON.stringify(convsForStorage));
         localStorage.setItem('ai_api', JSON.stringify(State.api));
 
         refreshWriteCharSelect();
 
-        // 异步归档：有角色超过 MAX 条时才排队（不紧急）
+        // 异步归档：用副本做，不碰 live 数组
         let needArchive = false;
-        Object.keys(convs).forEach(id => {
-            if (convs[id] && convs[id].length > MAX_ACTIVE_MSGS_PER_CHAR) needArchive = true;
+        Object.keys(convsForStorage).forEach(id => {
+            if (convsForStorage[id] && convsForStorage[id].length > MAX_ACTIVE_MSGS_PER_CHAR) needArchive = true;
         });
         if (needArchive && !__archiveTimer) {
             __archiveTimer = setTimeout(() => {
@@ -129,25 +138,25 @@ function saveToStorage() {
 
 function __doArchive() {
     try {
-        const convs = State.conversations || {};
-        Object.keys(convs).forEach(id => {
-            const arr = convs[id];
+        // 🔴 归档只操作 localStorage，绝不碰 State.conversations 的 live 数组！
+        //    UI 上看到的对话永远是完整的（含归档老消息），localStorage 里只存尾巴 80 条。
+        const convsForStorage = JSON.parse(localStorage.getItem('ai_conversations') || '{}');
+        Object.keys(convsForStorage).forEach(id => {
+            const arr = convsForStorage[id];
             if (!arr || !Array.isArray(arr)) return;
             if (arr.length > MAX_ACTIVE_MSGS_PER_CHAR) {
                 const keep = MAX_ACTIVE_MSGS_PER_CHAR;
                 const head = arr.slice(0, arr.length - keep);
+                const tail = arr.slice(-keep);
 
                 let archive = [];
                 try { archive = JSON.parse(localStorage.getItem('ai_conversation_archive_' + id) || '[]'); } catch {}
                 archive = archive.concat(head).slice(-500);  // 归档上限 500
                 localStorage.setItem('ai_conversation_archive_' + id, JSON.stringify(archive));
-
-                // 原地截断，保留原数组引用
-                arr.splice(0, arr.length - keep);
+                convsForStorage[id] = tail;
             }
         });
-        // 归档后再同步存一次截断后的 convs
-        localStorage.setItem('ai_conversations', JSON.stringify(convs));
+        localStorage.setItem('ai_conversations', JSON.stringify(convsForStorage));
     } catch (e) {
         console.warn('归档失败:', e);
     }

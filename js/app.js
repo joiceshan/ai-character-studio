@@ -101,14 +101,13 @@ function saveToStorage() {
 
 function __doSaveToStorage() {
     try {
-        // ✅ 过滤掉 __fake 标记的消息（"让 TA 继续"生成的 fake user 不入 storage）
+        // ✅ 过滤掉 __uiOnly 标记的消息（"让 TA 继续"生成的 fake user 不入 storage）
         const convs = State.conversations || {};
         Object.keys(convs).forEach(id => {
             const arr = convs[id] || [];
-            const filtered = arr.filter(m => !m || !m.__fake);
-            // 同时清理掉 __fake 字段本身（以防万一）
+            const filtered = arr.filter(m => !m || !m.__uiOnly);
             convs[id] = filtered.map(m => {
-                if (m && '__fake' in m) { const { __fake, ...rest } = m; return rest; }
+                if (m && '__uiOnly' in m) { const { __uiOnly, ...rest } = m; return rest; }
                 return m;
             });
         });
@@ -1566,8 +1565,12 @@ async function sendMessage() {
         return;
     }
 
-    // ✅ 用户真的发消息了，清掉 AI 伪造的 fake user 气泡
-    State.__continueFakeUser = null;
+    // ✅ 用户真的发消息了，清掉"让 TA 继续"残留的 fake user
+    State.__pendingFakeUser = null;
+    const activeId = State.activeCharacterId;
+    if (activeId && State.conversations[activeId]) {
+        State.conversations[activeId] = State.conversations[activeId].filter(m => !m || !m.__uiOnly);
+    }
 
     if (!State.api.baseUrl) {
         showToast('请先在「API」配置接口', 'error');
@@ -1702,15 +1705,27 @@ async function continueChat() {
     const typingEl = addTypingIndicator();
 
     try {
-        // ============ 调用 1：让 AI 先猜"你"会说什么（fake user，纯模拟）============
+        // ============ 调用 1：带完整历史，让 AI 扮演"对话另一方"猜你会说什么 ============
         let fakeUser = '';
         try {
-            const guessPrompt = `你现在**不再扮演之前的角色**，而是扮演正在和那个角色聊天的「对话另一方」（就是屏幕前的真人用户）。
-对话现在安静了，你作为真人用户，会怎么自然地开启下一句？
+            // 拼 system prompt + 完整历史 + 最后一条指令
+            const fakeUserPrompt =
+`你现在**不再扮演之前的角色**，而是扮演正在和那个角色聊天的「对话另一方」（就是屏幕前的真人用户）。
+基于上面的完整对话历史（你能看到所有历史消息），请以"对话另一方"（真人用户）的身份，自然地说下一句话。
+
 要求：
-- 简短口语化，12-30字
-- 可以问那个角色问题、吐槽、接话，符合真人聊天
-- **只输出这一句台词本身**，不要解释、不要加引号`;
+- 简短口语化，12-30字，像真人聊天
+- 要基于上面历史的语境，接得上刚才聊的内容
+- 可以接话、可以反问、可以吐槽，符合正常人际对话
+- **只输出这一句台词本身**，不要解释、不要加引号、不要加动作描写`;
+
+            // 构造 messages：先角色 system，再历史（去掉 __fake 的），最后一条 user 是指令
+            const cleanHistory = msgs.filter(m => !m || !m.__fake).map(m => ({ role: m.role, content: m.content }));
+            const fakeMessages = [
+                { role: 'system', content: `你正在扮演一个 AI 角色的「对话另一方」（真人用户）。` },
+                ...cleanHistory,
+                { role: 'user', content: fakeUserPrompt }
+            ];
 
             const resp = await fetch(`${State.api.baseUrl}/chat/completions`, {
                 method: 'POST',
@@ -1720,7 +1735,7 @@ async function continueChat() {
                 },
                 body: JSON.stringify({
                     model: State.api.model,
-                    messages: [{ role: 'user', content: guessPrompt }],
+                    messages: fakeMessages,
                     temperature: State.api.temperature ?? 0.7,
                     stream: false
                 })
@@ -1732,23 +1747,19 @@ async function continueChat() {
         } catch {}
         if (!fakeUser) fakeUser = '…… 你继续说啊。';
 
-        // ============ 调用 2：让 TA 回应 fakeUser 那句 ============
+        // ============ 调用 2：让 TA 回应 fakeUser 那句（带完整历史） ============
         const continueMsgs = [...msgs, { role: 'user', content: fakeUser }];
-        const instruction1 = '请以你的角色口吻，自然地回应对方刚才说的那一句。像你平时聊天那样，台词 + *动作描写*。';
-        const aiReply = await sendRequest(continueMsgs, undefined, instruction1);
+        const aiReply = await sendRequest(continueMsgs, undefined, '请以你的角色口吻，自然地回应对方刚才说的那一句。像你平时聊天那样，台词 + *动作描写*。');
         const aiSaid = (aiReply || '').trim();
 
         typingEl.remove();
 
-        // ✅ 顺序：先 fakeUser（右气泡，__fake 标记不入 history），再 assistant（左气泡，真实写入）
-        // 这样视觉上最后一条落在 TA（assistant）那边
-        msgs.push({ role: 'user', content: fakeUser, __fake: true });
+        // ✅ fake user 不入 msgs，挂在 State 上给 renderMessages 显示
+        //    msgs 里只 push TA 的 assistant 回复 → history 绝对干净
+        State.__pendingFakeUser = fakeUser;
         if (aiSaid) msgs.push({ role: 'assistant', content: aiSaid });
 
-        // fake user 临时 UI 标记（renderMessages 里的临时追加已经不需要了，直接靠 __fake 标记）
-        State.__continueFakeUser = null;
-
-        saveToStorage();  // saveToStorage 会过滤 __fake 的
+        saveToStorage();
         renderMessages();
         scrollToBottom();
     } catch (err) {
@@ -1936,13 +1947,27 @@ function renderMessages() {
         if (idx < renderSet.length) {
             requestAnimationFrame(tick);
         } else {
-            // 全部渲染完毕，最后一条加动画（移动端可能被 CSS 禁掉，无副作用）
-            const last = container.lastElementChild;
-            if (last && last.classList) last.classList.add('msg-in');
+            // 全部渲染完毕
             State.__renderingBatch = false;
 
+            // ✅ 插入 fake user 在最后一条 TA assistant 之前（这样顺序是 fake user 右 → TA 左，最后一条落在 TA）
+            if (State.__pendingFakeUser) {
+                const fakeEl = createMessageDiv('user', State.__pendingFakeUser, -1, null);
+                // 插到 container 最后一个子元素之前（如果最后一个是 TA assistant）
+                const last = container.lastElementChild;
+                if (last && last.classList && (last.classList.contains('message') && last.classList.contains('ai'))) {
+                    container.insertBefore(fakeEl, last);
+                } else {
+                    container.appendChild(fakeEl);
+                }
+                State.__pendingFakeUser = null;
+            }
+
+            const last = container.lastElementChild;
+            if (last && last.classList) last.classList.add('msg-in');
+
             if (State.__refreshFab) State.__refreshFab();
-            scrollToBottom();  // 渲染完自动滚到底
+            scrollToBottom();
         }
     };
     requestAnimationFrame(tick);

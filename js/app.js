@@ -1672,36 +1672,29 @@ async function continueChat() {
     const typingEl = addTypingIndicator();
 
     try {
-        // 先尝试带 response_format（严格 JSON），失败再降级
-        let reply;
-        let lastErrMsg = '';
-        try {
-            reply = await sendRequest(msgs, undefined, instruction, { type: 'json_object' });
-        } catch (firstErr) {
-            lastErrMsg = firstErr.message || String(firstErr);
-            // 如果因为 response_format 不支持被 API 拒绝（常见于部分国产模型），就降级重试一次
-            if (lastErrMsg.match(/response.format|unsupported|不支持|400/)) {
-                try {
+        // 先尝试带 response_format（严格 JSON），两种情况都自动降级：
+        // 1) API 报 400/不支持；2) API 200 但 content 空（DeepSeek-Flash 的 bug）
+        let reply = '', lastErrMsg = '';
+        let triedJsonFormat = false;
+        for (let attempt = 0; attempt < 2 && !reply.trim(); attempt++) {
+            try {
+                if (attempt === 0) {
+                    triedJsonFormat = true;
+                    reply = await sendRequest(msgs, undefined, instruction, { type: 'json_object' });
+                } else {
+                    // 第二次：去掉 response_format，普通格式
                     reply = await sendRequest(msgs, undefined, instruction);
-                } catch (e2) {
-                    lastErrMsg = e2.message || String(e2);
-                    throw e2;
                 }
-            } else {
-                throw firstErr;
+            } catch (err) {
+                lastErrMsg = err.message || String(err);
+                // 只有错误信息里明显是 response_format 相关的才重试；其他错误直接抛
+                if (attempt === 0 && !lastErrMsg.match(/response.format|unsupported|不支持|400/)) {
+                    throw err;
+                }
+                reply = '';
             }
         }
         typingEl.remove();
-
-        // 🔴 调试：dump 所有信息
-        let rawInfo = JSON.stringify(State.__lastRawResp || {}).slice(0, 400);
-        let debugParts = [
-            'reply类型: ' + typeof reply,
-            'reply长度: ' + (reply || '').length,
-            'lastErrMsg: ' + (lastErrMsg || '(无)'),
-            '原文完整: ' + JSON.stringify(reply || ''),
-            'API原始响应: ' + rawInfo
-        ].join(' | ');
 
         // 尝试解析 {ai, user} 结构
         let aiText = reply;
@@ -1710,13 +1703,18 @@ async function continueChat() {
         if (parsed && typeof parsed.ai === 'string' && parsed.ai.trim()) {
             aiText = parsed.ai.trim();
             userText = (parsed.user || '').toString().trim();
+        } else {
+            // 解析失败：再试一次正则拆 "ai":"..." "user":"..."
+            const aiM = reply.match(/"ai"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+            const uM = reply.match(/"user"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+            if (aiM) aiText = JSON.parse('"' + aiM[1] + '"');
+            if (uM) userText = JSON.parse('"' + uM[1] + '"');
         }
 
-        if (!userText) {
-            msgs.push({ role: 'error', content: '🔍 调试：没拿到 user 字段。' + debugParts });
-        }
+        // 清理旧的调试气泡，新的就不加了
+        // （上一版 V42 的调试气泡会留在历史里，那是正常的历史记录）
 
-        msgs.push({ role: 'assistant', content: aiText });
+        msgs.push({ role: 'assistant', content: aiText || '(AI 没说话)' });
         if (userText) msgs.push({ role: 'user', content: userText });
 
         saveToStorage();

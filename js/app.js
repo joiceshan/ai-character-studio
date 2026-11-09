@@ -101,8 +101,19 @@ function saveToStorage() {
 
 function __doSaveToStorage() {
     try {
-        // 对话归档：每个角色超过 MAX_ACTIVE_MSGS_PER_CHAR 的老消息挪到单独 key
+        // ✅ 过滤掉 __fake 标记的消息（"让 TA 继续"生成的 fake user 不入 storage）
         const convs = State.conversations || {};
+        Object.keys(convs).forEach(id => {
+            const arr = convs[id] || [];
+            const filtered = arr.filter(m => !m || !m.__fake);
+            // 同时清理掉 __fake 字段本身（以防万一）
+            convs[id] = filtered.map(m => {
+                if (m && '__fake' in m) { const { __fake, ...rest } = m; return rest; }
+                return m;
+            });
+        });
+
+        // 对话归档：每个角色超过 MAX_ACTIVE_MSGS_PER_CHAR 的老消息挪到单独 key
         Object.keys(convs).forEach(id => {
             const arr = convs[id] || [];
             if (arr.length > MAX_ACTIVE_MSGS_PER_CHAR) {
@@ -1691,74 +1702,53 @@ async function continueChat() {
     const typingEl = addTypingIndicator();
 
     try {
-        // ============ 调用 1：让角色正常开口说下一句（纯自然语言，不加格式要求）============
-        const instruction1 = '现在对话安静了。请以你的角色口吻，自然地主动说下一句话。可以问用户问题，也可以继续自己的叙事。用台词 + *动作描写* 的格式，像你平时回复那样，不要说"好的"之类的客套。';
-        const aiReply = await sendRequest(msgs, undefined, instruction1);
+        // ============ 调用 1：让 AI 先猜"你"会说什么（fake user，纯模拟）============
+        let fakeUser = '';
+        try {
+            const guessPrompt = `你现在**不再扮演之前的角色**，而是扮演正在和那个角色聊天的「对话另一方」（就是屏幕前的真人用户）。
+对话现在安静了，你作为真人用户，会怎么自然地开启下一句？
+要求：
+- 简短口语化，12-30字
+- 可以问那个角色问题、吐槽、接话，符合真人聊天
+- **只输出这一句台词本身**，不要解释、不要加引号`;
 
-        // ============ 调用 2：AI 模拟"用户"回应刚说的那句话 ============
-        const aiSaid = (aiReply || '').trim();
-        let userReply = '';
-        if (aiSaid) {
-            const userSimPrompt = `你现在**不再扮演之前的角色**，而是扮演正在和那个角色聊天的「对话另一方」（就是屏幕前的真人用户）。
-
-刚才那个角色对你说了：
-"""
-${aiSaid}
-"""
-
-请你作为「对话另一方」自然地回应他/她一句。要求：
-- 简短口语化，15-40字，像真人聊天
-- 可以接话、可以反问、可以吐槽，符合正常人际对话
-- **只输出这一句台词本身**，不要加动作描写、不要加引号、不要解释`;
-
-            // 🔧 调试：手动发一次，拿到完整 raw 响应
-            try {
-                const resp = await fetch(`${State.api.baseUrl}/chat/completions`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${State.api.apiKey}`
-                    },
-                    body: JSON.stringify({
-                        model: State.api.model,
-                        messages: [{ role: 'user', content: userSimPrompt }],
-                        temperature: State.api.temperature ?? 0.7,
-                        stream: false
-                    })
-                });
-                const rawText = await resp.text();
-                if (resp.ok) {
-                    try {
-                        const data = JSON.parse(rawText);
-                        userReply = (data.choices?.[0]?.message?.content || '').trim();
-                    } catch {}
-                }
-
-                // 🔴 调试：如果还是空，push 一个调试气泡（用 error role）
-                if (!userReply) {
-                    msgs.push({ role: 'error', content: '🔍 第二次调用返回空。HTTP:' + resp.status + ' raw前300字:' + rawText.slice(0, 300) });
-                }
-            } catch (fetchErr) {
-                msgs.push({ role: 'error', content: '🔍 第二次调用异常: ' + fetchErr.message });
+            const resp = await fetch(`${State.api.baseUrl}/chat/completions`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${State.api.apiKey}`
+                },
+                body: JSON.stringify({
+                    model: State.api.model,
+                    messages: [{ role: 'user', content: guessPrompt }],
+                    temperature: State.api.temperature ?? 0.7,
+                    stream: false
+                })
+            });
+            if (resp.ok) {
+                const data = JSON.parse(await resp.text());
+                fakeUser = (data.choices?.[0]?.message?.content || '').trim();
             }
-        }
+        } catch {}
+        if (!fakeUser) fakeUser = '…… 你继续说啊。';
+
+        // ============ 调用 2：让 TA 回应 fakeUser 那句 ============
+        const continueMsgs = [...msgs, { role: 'user', content: fakeUser }];
+        const instruction1 = '请以你的角色口吻，自然地回应对方刚才说的那一句。像你平时聊天那样，台词 + *动作描写*。';
+        const aiReply = await sendRequest(continueMsgs, undefined, instruction1);
+        const aiSaid = (aiReply || '').trim();
 
         typingEl.remove();
 
-        // ✅ 真实写入 history 的只有 assistant 那条
-        // （模拟 user 消息只用于当前 UI 展示，不写入 history，
-        //    否则下次继续对话会基于"AI 伪造的 user 消息"来接话，造成不同步）
+        // ✅ 顺序：先 fakeUser（右气泡，__fake 标记不入 history），再 assistant（左气泡，真实写入）
+        // 这样视觉上最后一条落在 TA（assistant）那边
+        msgs.push({ role: 'user', content: fakeUser, __fake: true });
         if (aiSaid) msgs.push({ role: 'assistant', content: aiSaid });
 
-        // 模拟 user 消息：单独存到 State，renderMessages 时临时追加显示
+        // fake user 临时 UI 标记（renderMessages 里的临时追加已经不需要了，直接靠 __fake 标记）
         State.__continueFakeUser = null;
-        if (userReply && userReply.trim()) {
-            State.__continueFakeUser = userReply.trim();
-        } else if (aiSaid) {
-            State.__continueFakeUser = '…… 嗯？然后呢？';
-        }
 
-        saveToStorage();
+        saveToStorage();  // saveToStorage 会过滤 __fake 的
         renderMessages();
         scrollToBottom();
     } catch (err) {
@@ -1950,13 +1940,6 @@ function renderMessages() {
             const last = container.lastElementChild;
             if (last && last.classList) last.classList.add('msg-in');
             State.__renderingBatch = false;
-
-            // ✅ 追加「让 TA 继续」生成的临时 fake user 气泡（只 UI 显示，不入 history）
-            if (State.__continueFakeUser) {
-                const fakeEl = createMessageDiv('user', State.__continueFakeUser, -1, null);
-                fakeEl.style.opacity = '0.85';  // 稍微淡一点，暗示这是 AI 模拟的
-                container.appendChild(fakeEl);
-            }
 
             if (State.__refreshFab) State.__refreshFab();
             scrollToBottom();  // 渲染完自动滚到底

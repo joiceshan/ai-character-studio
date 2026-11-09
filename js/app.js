@@ -1614,6 +1614,35 @@ function extractJsonObject(text) {
     }
 }
 
+// 让 AI 模拟"对话另一方（用户）"单独说一句话。
+// 不走 sendRequest（它会先拼角色设定的 system prompt），直接用单条 user 消息发请求。
+async function sendRawUserSimRequest(userSimPrompt) {
+    if (!State.api.baseUrl || !State.api.apiKey) return '';
+    const url = `${State.api.baseUrl}/chat/completions`;
+    const body = {
+        model: State.api.model,
+        messages: [{ role: 'user', content: userSimPrompt }],
+        temperature: State.api.temperature ?? 0.7,
+        stream: false
+    };
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${State.api.apiKey}`
+        },
+        body: JSON.stringify(body)
+    });
+    if (!response.ok) return '';
+    const text = await response.text();
+    try {
+        const data = JSON.parse(text);
+        return (data.choices?.[0]?.message?.content || '').trim();
+    } catch {
+        return '';
+    }
+}
+
 // 输入框和「帮我继续聊」按钮统一的 loading/禁用态
 function setSendingUI(sending) {
     const sendBtn = document.getElementById('sendBtn');
@@ -1654,46 +1683,42 @@ async function continueChat() {
         // 把欢迎语也带进上下文，让 AI 基于它接下一句
     }
 
-    const instruction = `现在对话安静了。请你以这个角色的口吻，续写接下来的两条消息：你先开口说一句，然后假设"对话另一方"会自然回应你一句，把这两句都一起输出。
-
-⚠️ 输出格式是硬性要求，必须严格遵守：
-**整个回复只能是一个 JSON 对象**，不能有任何 JSON 之外的文字、解释、前后缀、代码块标记。
-
-JSON 格式：{"ai": "你（角色）主动说的台词，可带 *动作描写*", "user": "对话另一方听到后自然回应的一句话"}
-
-- ai 那条保持你原来的语气，1-2句自然台词，可带动作神态
-- user 那条要像真人听到 ai 的话之后会说的，简短口语，10-30字
-- 两条要能自然衔接，user 是在回应 ai
-- **只回这一份 JSON，其他一个字都别写**
-
-示例：{"ai": "*指尖敲了敲桌面* 那幅画你真不想要？", "user": "想得美，拿走就别指望我还给你"}`;
-
     State.sending = true;
     setSendingUI(true);
     const typingEl = addTypingIndicator();
 
     try {
-        // 🔧 直接发普通格式（response_format 在 DeepSeek-Flash 上有 bug，会返回空 content）
-        let reply = await sendRequest(msgs, undefined, instruction);
-        typingEl.remove();
+        // ============ 调用 1：让角色正常开口说下一句（纯自然语言，不加格式要求）============
+        const instruction1 = '现在对话安静了。请以你的角色口吻，自然地主动说下一句话。可以问用户问题，也可以继续自己的叙事。用台词 + *动作描写* 的格式，像你平时回复那样，不要说"好的"之类的客套。';
+        const aiReply = await sendRequest(msgs, undefined, instruction1);
 
-        // 双重解析：先 JSON.parse → 失败再正则拆 "ai" / "user"
-        let aiText = reply;
-        let userText = '';
-        const parsed = extractJsonObject(reply);
-        if (parsed && typeof parsed.ai === 'string' && parsed.ai.trim()) {
-            aiText = parsed.ai.trim();
-            userText = (parsed.user || '').toString().trim();
-        } else {
-            // 正则兜底：从文本里抠 ai / user 字段值
-            const aiM = reply.match(/"ai"\s*:\s*"((?:[^"\\]|\\.)*)"/);
-            const uM = reply.match(/"user"\s*:\s*"((?:[^"\\]|\\.)*)"/);
-            if (aiM) { try { aiText = JSON.parse('"' + aiM[1] + '"'); } catch {} }
-            if (uM) { try { userText = JSON.parse('"' + uM[1] + '"'); } catch {} }
+        // ============ 调用 2：AI 模拟"用户"回应刚说的那句话 ============
+        // system prompt 切换成"你是对话另一方"，并且把角色刚说的那句话作为新的上下文
+        const aiSaid = (aiReply || '').trim();
+        let userReply = '';
+        if (aiSaid) {
+            // 构建一个临时的 system prompt：让 AI 模拟用户
+            const userSimPrompt = `你现在**不再扮演之前的角色**，而是扮演正在和那个角色聊天的「对话另一方」（就是屏幕前的真人用户）。
+
+刚才那个角色对你说了：
+"""
+${aiSaid}
+"""
+
+请你作为「对话另一方」自然地回应他/她一句。要求：
+- 简短口语化，15-40字，像真人聊天
+- 可以接话、可以反问、可以吐槽，符合正常人际对话
+- **只输出这一句台词本身**，不要加动作描写、不要加引号、不要解释`;
+
+            // 用 sendRequest 的 extraInstruction 路径，但注意 system prompt 里的角色设定会先构建
+            // 所以我们绕过 sendRequest，直接发一次 API，只带模拟用户的 prompt
+            userReply = await sendRawUserSimRequest(userSimPrompt);
         }
 
-        msgs.push({ role: 'assistant', content: aiText.trim() || '(AI 没说话)' });
-        if (userText.trim()) msgs.push({ role: 'user', content: userText.trim() });
+        typingEl.remove();
+
+        if (aiSaid) msgs.push({ role: 'assistant', content: aiSaid });
+        if (userReply && userReply.trim()) msgs.push({ role: 'user', content: userReply.trim() });
 
         saveToStorage();
         renderMessages();

@@ -970,10 +970,12 @@ ${RATING_SAFETY_RULE}
             body: JSON.stringify(body)
         });
     } catch (networkErr) {
+        State.__lastRawResp = { err: 'FETCH_FAIL: ' + networkErr.message };
         throw new Error('网络错误（可能是 CORS 或无法连接）: ' + networkErr.message);
     }
 
     const text = await response.text();
+    State.__lastRawResp = { ok: response.ok, status: response.status, text: text.slice(0, 1500) };
     if (!response.ok) {
         let detail = text;
         try {
@@ -1672,17 +1674,34 @@ async function continueChat() {
     try {
         // 先尝试带 response_format（严格 JSON），失败再降级
         let reply;
+        let lastErrMsg = '';
         try {
             reply = await sendRequest(msgs, undefined, instruction, { type: 'json_object' });
         } catch (firstErr) {
+            lastErrMsg = firstErr.message || String(firstErr);
             // 如果因为 response_format 不支持被 API 拒绝（常见于部分国产模型），就降级重试一次
-            if (String(firstErr.message || '').match(/response.format|unsupported|不支持|400/)) {
-                reply = await sendRequest(msgs, undefined, instruction);
+            if (lastErrMsg.match(/response.format|unsupported|不支持|400/)) {
+                try {
+                    reply = await sendRequest(msgs, undefined, instruction);
+                } catch (e2) {
+                    lastErrMsg = e2.message || String(e2);
+                    throw e2;
+                }
             } else {
                 throw firstErr;
             }
         }
         typingEl.remove();
+
+        // 🔴 调试：dump 所有信息
+        let rawInfo = JSON.stringify(State.__lastRawResp || {}).slice(0, 400);
+        let debugParts = [
+            'reply类型: ' + typeof reply,
+            'reply长度: ' + (reply || '').length,
+            'lastErrMsg: ' + (lastErrMsg || '(无)'),
+            '原文完整: ' + JSON.stringify(reply || ''),
+            'API原始响应: ' + rawInfo
+        ].join(' | ');
 
         // 尝试解析 {ai, user} 结构
         let aiText = reply;
@@ -1693,9 +1712,8 @@ async function continueChat() {
             userText = (parsed.user || '').toString().trim();
         }
 
-        // 🔴 临时调试：如果还是只拿到一条，把 API 返回原文加到 error 气泡里方便排查
         if (!userText) {
-            msgs.push({ role: 'error', content: '🔍 调试信息：API 没返回 JSON，只收到一条台词。原文预览：「' + String(reply || '').slice(0, 200) + '」' });
+            msgs.push({ role: 'error', content: '🔍 调试：没拿到 user 字段。' + debugParts });
         }
 
         msgs.push({ role: 'assistant', content: aiText });

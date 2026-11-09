@@ -1555,6 +1555,9 @@ async function sendMessage() {
         return;
     }
 
+    // ✅ 用户真的发消息了，清掉 AI 伪造的 fake user 气泡
+    State.__continueFakeUser = null;
+
     if (!State.api.baseUrl) {
         showToast('请先在「API」配置接口', 'error');
         switchToTab('settings');
@@ -1742,12 +1745,17 @@ ${aiSaid}
 
         typingEl.remove();
 
+        // ✅ 真实写入 history 的只有 assistant 那条
+        // （模拟 user 消息只用于当前 UI 展示，不写入 history，
+        //    否则下次继续对话会基于"AI 伪造的 user 消息"来接话，造成不同步）
         if (aiSaid) msgs.push({ role: 'assistant', content: aiSaid });
+
+        // 模拟 user 消息：单独存到 State，renderMessages 时临时追加显示
+        State.__continueFakeUser = null;
         if (userReply && userReply.trim()) {
-            msgs.push({ role: 'user', content: userReply.trim() });
+            State.__continueFakeUser = userReply.trim();
         } else if (aiSaid) {
-            // fallback：如果模拟用户失败，硬塞一条保底文本，保证右边有气泡
-            msgs.push({ role: 'user', content: '…… 嗯？然后呢？' });
+            State.__continueFakeUser = '…… 嗯？然后呢？';
         }
 
         saveToStorage();
@@ -1942,6 +1950,14 @@ function renderMessages() {
             const last = container.lastElementChild;
             if (last && last.classList) last.classList.add('msg-in');
             State.__renderingBatch = false;
+
+            // ✅ 追加「让 TA 继续」生成的临时 fake user 气泡（只 UI 显示，不入 history）
+            if (State.__continueFakeUser) {
+                const fakeEl = createMessageDiv('user', State.__continueFakeUser, -1, null);
+                fakeEl.style.opacity = '0.85';  // 稍微淡一点，暗示这是 AI 模拟的
+                container.appendChild(fakeEl);
+            }
+
             if (State.__refreshFab) State.__refreshFab();
             scrollToBottom();  // 渲染完自动滚到底
         }

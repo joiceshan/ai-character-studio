@@ -1705,59 +1705,64 @@ async function continueChat() {
     const typingEl = addTypingIndicator();
 
     try {
-        // ============ 调用 1：带完整历史，让 AI 扮演"对话另一方"猜你会说什么 ============
-        let fakeUser = '';
-        try {
-            // 拼 system prompt + 完整历史 + 最后一条指令
-            const fakeUserPrompt =
-`你现在**不再扮演之前的角色**，而是扮演正在和那个角色聊天的「对话另一方」（就是屏幕前的真人用户）。
-基于上面的完整对话历史（你能看到所有历史消息），请以"对话另一方"（真人用户）的身份，自然地说下一句话。
+        // ✅ 一次 API 调用，让 AI 输出对话脚本，拆成 3 条气泡：TA 说 → 你（AI 模拟）说 → TA 再说
+        // 这样最后一条永远是 TA 那边，且只调用一次，没有 fake user 污染 history 的问题
+        const scriptPrompt = `现在对话安静了。请你以这个角色的口吻，继续对话。
+请输出一段 3 行的对话脚本，格式严格如下（每一行都以"TA说："或"你说："开头）：
 
-要求：
-- 简短口语化，12-30字，像真人聊天
-- 要基于上面历史的语境，接得上刚才聊的内容
-- 可以接话、可以反问、可以吐槽，符合正常人际对话
-- **只输出这一句台词本身**，不要解释、不要加引号、不要加动作描写`;
+TA说：（你的角色主动接下一句，可带 *动作描写*）
+你说：（对话另一方听到后会自然回应一句，15-30字，口语化）
+TA说：（你的角色再回应"你说"的那一句，可带 *动作描写*）
 
-            // 构造 messages：先角色 system，再历史（去掉 __fake 的），最后一条 user 是指令
-            const cleanHistory = msgs.filter(m => !m || !m.__fake).map(m => ({ role: m.role, content: m.content }));
-            const fakeMessages = [
-                { role: 'system', content: `你正在扮演一个 AI 角色的「对话另一方」（真人用户）。` },
-                ...cleanHistory,
-                { role: 'user', content: fakeUserPrompt }
-            ];
+⚠️ 严格要求：
+- 只输出这三行，不要解释、不要加引号、不要加```代码块标记
+- "TA说："是你的角色说的，"你说："是对话另一方（屏幕前的真人用户）会说的
+- 三行要能自然衔接，像真实对话
+- 每条台词 1-2 句自然语气`;
 
-            const resp = await fetch(`${State.api.baseUrl}/chat/completions`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${State.api.apiKey}`
-                },
-                body: JSON.stringify({
-                    model: State.api.model,
-                    messages: fakeMessages,
-                    temperature: State.api.temperature ?? 0.7,
-                    stream: false
-                })
-            });
-            if (resp.ok) {
-                const data = JSON.parse(await resp.text());
-                fakeUser = (data.choices?.[0]?.message?.content || '').trim();
-            }
-        } catch {}
-        if (!fakeUser) fakeUser = '…… 你继续说啊。';
-
-        // ============ 调用 2：让 TA 回应 fakeUser 那句（带完整历史） ============
-        const continueMsgs = [...msgs, { role: 'user', content: fakeUser }];
-        const aiReply = await sendRequest(continueMsgs, undefined, '请以你的角色口吻，自然地回应对方刚才说的那一句。像你平时聊天那样，台词 + *动作描写*。');
-        const aiSaid = (aiReply || '').trim();
-
+        const scriptReply = await sendRequest(msgs, undefined, scriptPrompt);
         typingEl.remove();
 
-        // ✅ fake user 不入 msgs，挂在 State 上给 renderMessages 显示
-        //    msgs 里只 push TA 的 assistant 回复 → history 绝对干净
-        State.__pendingFakeUser = fakeUser;
-        if (aiSaid) msgs.push({ role: 'assistant', content: aiSaid });
+        // 解析三行
+        const scriptText = (scriptReply || '').trim();
+        const lines = scriptText.split(/\n+/).map(l => l.trim()).filter(Boolean);
+
+        const extracts = [];  // [{role: 'assistant'|'user', text: '...'}]
+        for (const line of lines) {
+            let m;
+            m = line.match(/^(?:TA\s*说\s*[:：]\s*)(.+)$/i);
+            if (m) { extracts.push({ role: 'assistant', text: m[1].trim() }); continue; }
+            m = line.match(/^(?:你\s*说\s*[:：]\s*)(.+)$/);
+            if (m) { extracts.push({ role: 'user', text: m[1].trim() }); continue; }
+            m = line.match(/^(?:我\s*说\s*[:：]\s*)(.+)$/);  // 有些模型会用"我说"代替"你说"
+            if (m) { extracts.push({ role: 'user', text: m[1].trim() }); continue; }
+        }
+
+        // 如果完全没解析出来，fallback：把整段当 assistant 台词
+        if (extracts.length === 0) {
+            if (scriptText) extracts.push({ role: 'assistant', text: scriptText });
+        }
+
+        // 修正顺序：保证最后一条是 TA（assistant）
+        if (extracts.length > 0 && extracts[extracts.length - 1].role !== 'assistant') {
+            extracts.pop();
+        }
+
+        // 如果没 assistant，放弃
+        const hasAssistant = extracts.some(e => e.role === 'assistant');
+        if (!hasAssistant) {
+            showToast('❌ AI 没返回有效的继续对话脚本', 'error');
+            return;
+        }
+
+        // ✅ 把所有 assistant push 进 msgs（入 history），user 的只临时显示不入 history
+        const fakeUserText = extracts.find(e => e.role === 'user')?.text || null;
+        for (const e of extracts) {
+            if (e.role === 'assistant') {
+                msgs.push({ role: 'assistant', content: e.text });
+            }
+        }
+        State.__pendingFakeUser = fakeUserText;
 
         saveToStorage();
         renderMessages();
@@ -1950,13 +1955,25 @@ function renderMessages() {
             // 全部渲染完毕
             State.__renderingBatch = false;
 
-            // ✅ 插入 fake user 在最后一条 TA assistant 之前（这样顺序是 fake user 右 → TA 左，最后一条落在 TA）
+            // ✅ 插入 fake user：找最后两条都是 assistant 的情况，插在它们之间
             if (State.__pendingFakeUser) {
+                const children = Array.from(container.children);
+                let lastAI = null;   // 倒数第一个 assistant
+                let prevAI = null;   // 倒数第二个 assistant
+                for (let i = children.length - 1; i >= 0; i--) {
+                    const el = children[i];
+                    if (el.classList && el.classList.contains('message') && el.classList.contains('ai')) {
+                        if (!lastAI) lastAI = el;
+                        else { prevAI = el; break; }
+                    }
+                }
                 const fakeEl = createMessageDiv('user', State.__pendingFakeUser, -1, null);
-                // 插到 container 最后一个子元素之前（如果最后一个是 TA assistant）
-                const last = container.lastElementChild;
-                if (last && last.classList && (last.classList.contains('message') && last.classList.contains('ai'))) {
-                    container.insertBefore(fakeEl, last);
+                if (prevAI && lastAI) {
+                    // 两个 assistant 都找到，插在它们之间（= 倒数第一个 assistant 之前）
+                    container.insertBefore(fakeEl, lastAI);
+                } else if (lastAI) {
+                    // 只找到一个 assistant，插在它前面
+                    container.insertBefore(fakeEl, lastAI);
                 } else {
                     container.appendChild(fakeEl);
                 }

@@ -1237,13 +1237,23 @@ function openTenorTab() {
 async function doGifSearch(keyword, limit) {
     const grid = document.getElementById('gifGrid');
     if (!grid) return;
-    grid.innerHTML = '<div class="gif-loading">⏳ 搜索中（Tenor → Giphy 双源）...</div>';
+    grid.innerHTML = '<div class="gif-loading" id="gifLoadingText">⏳ 搜索GIF中...</div>';
     grid.scrollTop = 0;
+
+    // 倒计时 12 秒（与总超时同步）
+    let left = 12;
+    const countdown = setInterval(() => {
+        const el = document.getElementById('gifLoadingText');
+        if (el) el.innerHTML = `⏳ 搜索中... (${left}s)`;
+        left--;
+        if (left < 0) clearInterval(countdown);
+    }, 1000);
 
     try {
         const results = await searchGifsWithTimeout(keyword, limit || 18);
+        clearInterval(countdown);
         if (!results || results.length === 0) {
-            grid.innerHTML = '<div class="gif-empty">没找到匹配的 GIF，换个关键词试试<br>或切 Emoji Tab</div>';
+            grid.innerHTML = '<div class="gif-empty">没找到匹配的 GIF，换个关键词试试<br>或切 Emoji Tab / 我的收藏</div>';
             return;
         }
         grid.innerHTML = results.map(r =>
@@ -1256,12 +1266,14 @@ async function doGifSearch(keyword, limit) {
             });
         });
     } catch (e) {
+        clearInterval(countdown);
         console.warn('GIF 搜索全部失败:', e);
         grid.innerHTML = `
             <div class="gif-error">
-                🌐 所有 GIF 源都不可用<br>
-                Tenor 被拒绝 + Giphy 代理也连不上<br><br>
-                试试切 Emoji Tab 或上传自己的图片
+                🎬 GIF源全部不可用（${(e.message || '').slice(0,20)}）<br><br>
+                ✅ Emoji Tab 立即可用<br>
+                ✅ 我的收藏（上传自己的图片）<br>
+                或开 VPN 让 Tenor 有机会工作
             </div>`;
     }
 }
@@ -1270,34 +1282,57 @@ async function searchGifsWithTimeout(keyword, limit) {
     limit = Math.max(6, Math.min(limit || 18, 30));
     const q = keyword || 'trending';
 
-    // 多源自动 fallback —— Tenor 403 / 超时 → 切 Giphy (via allorigins 免费代理)
-    const sources = [
-        { name: 'Tenor直连', fn: () => fetchTenorDirect(q, limit) },
-        { name: 'Giphy+代理', fn: () => fetchGiphyViaProxy(q, limit) },
+    // 备选代理（Giphy），按优先级尝试
+    const giphyEndpoints = [
+        (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+        (url) => `https://proxy.cors.io/raw?url=${encodeURIComponent(url)}`,
+        (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+        (url) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
     ];
 
+    const sources = [
+        { name: 'Tenor直连', fn: () => fetchTenorDirect(q, limit) },
+        ...giphyEndpoints.map(proxy => ({
+            name: 'Giphy代理',
+            fn: () => fetchGiphyViaProxy(q, limit, proxy)
+        }))
+    ];
+
+    const OVERALL_TIMEOUT = 12000;  // 总超时 12 秒
+    const overallCtrl = new AbortController();
+    const overallTimer = setTimeout(() => overallCtrl.abort(), OVERALL_TIMEOUT);
     let lastErr = null;
-    for (const src of sources) {
-        try {
-            const ctrl = new AbortController();
-            const timer = setTimeout(() => ctrl.abort(), 6000);
-            let results;
+
+    try {
+        for (const src of sources) {
             try {
-                results = await src.fn(ctrl.signal);
-            } finally { clearTimeout(timer); }
-            if (results && results.length > 0) return results;
-        } catch (e) {
-            lastErr = e;
-            console.warn(`[GIF搜索] ${src.name} 失败:`, e.name === 'AbortError' ? '超时' : e.message);
+                const ctrl = new AbortController();
+                const timer = setTimeout(() => ctrl.abort(), 4000);  // 每个源 4 秒
+                let results;
+                try {
+                    results = await Promise.race([
+                        src.fn(ctrl.signal),
+                        new Promise((_, rej) => overallCtrl.signal.addEventListener('abort', () => rej(new Error('总超时'))))
+                    ]);
+                } finally { clearTimeout(timer); }
+                if (results && results.length > 0) return results;
+            } catch (e) {
+                lastErr = e;
+                const shortMsg = e.name === 'AbortError' ? '超时' : (e.message || '').slice(0, 30);
+                console.warn(`[GIF搜索] ${src.name} 跳过:`, shortMsg);
+                if (overallCtrl.signal.aborted) break;
+            }
         }
+    } finally {
+        clearTimeout(overallTimer);
     }
     throw lastErr || new Error('所有源都不可用');
 }
 
-// Tenor 直连（需要 VPN）
-async function fetchTenorDirect(q, limit) {
+// Tenor 直连
+async function fetchTenorDirect(q, limit, signal) {
     const url = `https://tenor.googleapis.com/v2/search?q=${encodeURIComponent(q)}&client_key=${GIF_CLIENT_KEY}&limit=${limit}&contentfilter=off&media_filter=minimal`;
-    const resp = await fetch(url);
+    const resp = await fetch(url, { signal });
     if (!resp.ok) throw new Error('Tenor HTTP ' + resp.status);
     const data = await resp.json();
     return (data.results || []).map(r => ({
@@ -1306,13 +1341,17 @@ async function fetchTenorDirect(q, limit) {
     })).filter(r => r.tiny && r.full);
 }
 
-// Giphy + allorigins 代理（国内大概率能通）
-async function fetchGiphyViaProxy(q, limit) {
+// Giphy + 代理（尝试多个备选）
+async function fetchGiphyViaProxy(q, limit, proxyBuilder) {
     const giphyUrl = `https://api.giphy.com/v1/gifs/search?q=${encodeURIComponent(q)}&api_key=dc6zaTOxFJmzC&limit=${limit}&rating=pg-13`;
-    const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(giphyUrl)}`;
+    const proxyUrl = proxyBuilder(giphyUrl);
     const resp = await fetch(proxyUrl);
     if (!resp.ok) throw new Error('Giphy代理 HTTP ' + resp.status);
     const data = await resp.json();
+    if (typeof data !== 'object' || !data.data) {
+        // allorigins 有时返回 HTML 错误页
+        throw new Error('代理返回格式异常');
+    }
     return (data.data || []).map(r => ({
         tiny: r.images?.fixed_width?.url || r.images?.preview_gif?.url || '',
         full: r.images?.fixed_height?.url || r.images?.original?.url || ''

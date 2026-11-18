@@ -1187,8 +1187,8 @@ async function doGifSearch(keyword, limit) {
 
 async function searchGifs(keyword, limit) {
     limit = Math.max(6, Math.min(limit || 18, 30));
-    let url = `https://tenor.googleapis.com/v2/search?q=${encodeURIComponent(keyword || 'trending')}&client_key=${GIF_CLIENT_KEY}&limit=${limit}&contentfilter=low&media_filter=minimal`;
-    if (!keyword) url = `https://tenor.googleapis.com/v2/search?q=trending&client_key=${GIF_CLIENT_KEY}&limit=${limit}&contentfilter=low&media_filter=minimal`;
+    let url = `https://tenor.googleapis.com/v2/search?q=${encodeURIComponent(keyword || 'trending')}&client_key=${GIF_CLIENT_KEY}&limit=${limit}&contentfilter=off&media_filter=minimal`;
+    if (!keyword) url = `https://tenor.googleapis.com/v2/search?q=trending&client_key=${GIF_CLIENT_KEY}&limit=${limit}&contentfilter=off&media_filter=minimal`;
 
     const resp = await fetch(url);
     if (!resp.ok) throw new Error('HTTP ' + resp.status);

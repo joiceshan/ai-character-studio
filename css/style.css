@@ -2409,8 +2409,8 @@ input[type="range"]::-webkit-slider-thumb {
     flex: 1;
     overflow-y: auto;
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 8px;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 4px;
     padding-right: 4px;
     min-height: 120px;
 }
@@ -2519,8 +2519,8 @@ input[type="range"]::-webkit-slider-thumb {
         animation: sheet-up 0.22s ease;
     }
     .gif-grid {
-        grid-template-columns: repeat(1, 1fr);
-        gap: 10px;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 5px;
     }
     .msg-content .msg-sticker {
         max-width: 80px;

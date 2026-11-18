@@ -771,6 +771,10 @@ function initSettingsForm() {
                 baseUrl.value = 'https://api.deepseek.com/v1';
                 model.value = 'deepseek-chat';
                 break;
+            case 'cursor':
+                baseUrl.value = 'https://api.cursor.sh/v1';
+                model.value = 'cursor-small';
+                break;
             case 'grok':
                 baseUrl.value = 'https://api.x.ai/v1';
                 model.value = 'grok-4-mini';

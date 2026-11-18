@@ -860,7 +860,8 @@ function collectApiSettings() {
         baseUrl: document.getElementById('apiBaseUrl').value.trim().replace(/\/$/, ''),
         apiKey: document.getElementById('apiKey').value.trim(),
         model: document.getElementById('apiModel').value.trim(),
-        temperature: parseFloat(document.getElementById('apiTemperature').value)
+        temperature: parseFloat(document.getElementById('apiTemperature').value),
+        gifFrequency: parseInt(document.getElementById('gifFrequency').value, 10)
     };
 }
 
@@ -872,6 +873,7 @@ function updateSettingsForm() {
     document.getElementById('apiModel').value = State.api.model || 'gpt-4o-mini';
     document.getElementById('apiTemperature').value = State.api.temperature ?? 0.7;
     document.getElementById('tempValue').textContent = State.api.temperature ?? 0.7;
+    document.getElementById('gifFrequency').value = String(State.api.gifFrequency ?? 1);
 }
 
 function showApiStatus(type, msg) {
@@ -1008,6 +1010,18 @@ async function sendRawRequest(messages, instruction) {
     }
 }
 
+// 根据频率等级返回对应的 GIF 指令段落（拼进 system prompt）
+function getGifInstruction(level) {
+    const tags = '开心、害羞、生气、难过、抱抱、亲亲、晚安、早安、加油、再见、性感、惊讶、思考、调皮、吃饭、跳舞、傲娇、委屈、比心';
+    switch (level) {
+        case 0: return '';
+        case 1: return `\n- GIF表情（偶尔）：只有当你情绪非常强烈时，才在回复末尾加一个 GIF 标签，格式是 [GIF:中文标签]。可选标签：${tags}。例如极度害羞时 [GIF:害羞]，只有特别想表达情绪才加，大部分时候不要加。每次回复最多加 1 个 GIF。`;
+        case 2: return `\n- GIF表情（经常）：大约每 2-3 次回复就要在末尾加一个 GIF 标签，格式是 [GIF:中文标签]。可选标签：${tags}。例如 [GIF:开心] [GIF:抱抱] [GIF:性感] [GIF:傲娇]。选最贴合当前情绪的标签。每次回复最多加 1 个 GIF。`;
+        case 3: return `\n- GIF表情（每句都加）：**每一条回复**都必须在末尾加一个 GIF 标签，格式是 [GIF:中文标签]，这是必须的！可选标签：${tags}。例如 [GIF:开心] [GIF:害羞] [GIF:亲亲] [GIF:性感] [GIF:傲娇]。即使情绪不太强烈也要选一个最接近的标签。每次回复加 1 个 GIF。`;
+        default: return '';
+    }
+}
+
 async function sendRequest(messages, temperature, extraInstruction, responseFormat) {
     if (!State.api.baseUrl || !State.api.apiKey) {
         throw new Error('请先在「API」页面配置接口');
@@ -1035,8 +1049,7 @@ ${RATING_SAFETY_RULE}
 关于回复格式的约定：
 - 可以用 *动作描写* 或 *表情* 来表现神态，例如：*微微一笑* 没关系的
 - *xxx* 之间的内容是动作、表情、心理活动，不是直接说出来的台词
-- 台词部分直接写出来即可，不需要加引号
-- 当你想表达情绪，可以在回复末尾加一个 GIF 标签，格式是 [GIF:中文标签]，例如 [GIF:害羞] [GIF:亲亲] [GIF:性感]。可选标签：开心、害羞、生气、难过、抱抱、亲亲、晚安、早安、加油、再见、性感、惊讶、思考、调皮、吃饭、跳舞、傲娇、委屈、比心。每次回复最多加 1 个 GIF。
+- 台词部分直接写出来即可，不需要加引号${getGifInstruction(State.api?.gifFrequency ?? 1)}
 
 请自然地回应，不要在回复中说明自己是在扮演角色。用该角色的口吻说话。`;
     }

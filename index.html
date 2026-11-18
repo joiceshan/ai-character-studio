@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#667eea">
     <title>AI Chat</title>
-    <link rel="stylesheet" href="css/style.css?v=75">
+    <link rel="stylesheet" href="css/style.css?v=76">
 </head>
 <body>
     <!-- 顶部导航 -->
@@ -356,6 +356,17 @@
                     <small class="hint">越低越稳定，越高越有创意</small>
                 </div>
 
+                <div class="form-group">
+                    <label>TA 发表情的频率</label>
+                    <select id="gifFrequency">
+                        <option value="0">从不</option>
+                        <option value="1" selected>偶尔（情绪强烈时）</option>
+                        <option value="2">经常（开心/害羞/生气等都加）</option>
+                        <option value="3">每句都加</option>
+                    </select>
+                    <small class="hint">AI 回复末尾自动加 [GIF:标签]，前端替换成动图</small>
+                </div>
+
                 <button class="btn-primary btn-large" id="testApiBtn">🔗 测试连接</button>
 
                 <div class="api-status" id="apiStatus" style="margin-top:12px;"></div>
@@ -432,6 +443,6 @@
     <!-- Toast 提示 -->
     <div class="toast" id="toast"></div>
 
-    <script src="js/app.js?v=75"></script>
+    <script src="js/app.js?v=76"></script>
 </body>
 </html>

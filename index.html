@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#667eea">
     <title>AI Chat</title>
-    <link rel="stylesheet" href="css/style.css?v=76">
+    <link rel="stylesheet" href="css/style.css?v=77">
 </head>
 <body>
     <!-- 顶部导航 -->
@@ -270,6 +270,18 @@
                 </div>
 
                 <div class="form-group">
+                    <label>发表情的频率</label>
+                    <select id="charGifFreq">
+                        <option value="-1">跟随全局设置</option>
+                        <option value="0">从不</option>
+                        <option value="1" selected>偶尔（情绪强烈时）</option>
+                        <option value="2">经常</option>
+                        <option value="3">每句都加</option>
+                    </select>
+                    <span class="hint">这个角色的 GIF 发表频率，「跟随全局」= 用 API 设置里的默认值</span>
+                </div>
+
+                <div class="form-group">
                     <label>性格特点</label>
                     <textarea id="charPersonality" placeholder="描述性格、说话方式、口头禅等...&#10;例如：温柔体贴，说话总是带着微笑，喜欢用比喻"></textarea>
                 </div>
@@ -443,6 +455,6 @@
     <!-- Toast 提示 -->
     <div class="toast" id="toast"></div>
 
-    <script src="js/app.js?v=76"></script>
+    <script src="js/app.js?v=77"></script>
 </body>
 </html>

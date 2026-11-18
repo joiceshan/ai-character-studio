@@ -462,6 +462,7 @@ function createNewCharacterAndEdit() {
     document.getElementById('charIdentity').value = '';
     document.getElementById('charAgeGroup').value = '';
     document.getElementById('charRating').value = 'all';
+    document.getElementById('charGifFreq').value = '-1';
     document.getElementById('charPersonality').value = '';
     document.getElementById('charBackground').value = '';
     document.getElementById('charGreeting').value = '';
@@ -615,6 +616,7 @@ function initCharacterForm() {
             identity: document.getElementById('charIdentity').value.trim(),
             ageGroup: document.getElementById('charAgeGroup').value,
             rating: document.getElementById('charRating').value,
+            gifFrequency: parseInt(document.getElementById('charGifFreq').value, 10),
             personality: document.getElementById('charPersonality').value.trim(),
             background: document.getElementById('charBackground').value.trim(),
             greeting: document.getElementById('charGreeting').value.trim()
@@ -698,6 +700,7 @@ function populateCharacterForm() {
     document.getElementById('charIdentity').value = c.identity || '';
     document.getElementById('charAgeGroup').value = c.ageGroup || '';
     document.getElementById('charRating').value = c.rating || 'all';
+    document.getElementById('charGifFreq').value = String(c.gifFrequency ?? -1);
     document.getElementById('charPersonality').value = c.personality || '';
     document.getElementById('charBackground').value = c.background || '';
     document.getElementById('charGreeting').value = c.greeting || '';
@@ -1010,6 +1013,13 @@ async function sendRawRequest(messages, instruction) {
     }
 }
 
+// 解析最终 GIF 频率：角色自己的设置 > 全局 API 设置 > 默认 1
+function resolveGifFrequency(char) {
+    const g = char?.gifFrequency;
+    if (g !== undefined && g !== null && g >= 0) return g;
+    return State.api?.gifFrequency ?? 1;
+}
+
 // 根据频率等级返回对应的 GIF 指令段落（拼进 system prompt）
 function getGifInstruction(level) {
     const tags = '开心、害羞、生气、难过、抱抱、亲亲、晚安、早安、加油、再见、性感、惊讶、思考、调皮、吃饭、跳舞、傲娇、委屈、比心';
@@ -1049,7 +1059,7 @@ ${RATING_SAFETY_RULE}
 关于回复格式的约定：
 - 可以用 *动作描写* 或 *表情* 来表现神态，例如：*微微一笑* 没关系的
 - *xxx* 之间的内容是动作、表情、心理活动，不是直接说出来的台词
-- 台词部分直接写出来即可，不需要加引号${getGifInstruction(State.api?.gifFrequency ?? 1)}
+- 台词部分直接写出来即可，不需要加引号${getGifInstruction(resolveGifFrequency(c))}
 
 请自然地回应，不要在回复中说明自己是在扮演角色。用该角色的口吻说话。`;
     }

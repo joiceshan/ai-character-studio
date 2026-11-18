@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#667eea">
     <title>AI 人物工坊 · Character Studio</title>
-    <link rel="stylesheet" href="css/style.css?v=59">
+    <link rel="stylesheet" href="css/style.css?v=60">
 </head>
 <body>
     <!-- 顶部导航 -->
@@ -88,6 +88,7 @@
                         <div class="input-row-wrapper">
                             <div class="input-row">
                                 <button class="font-btn" id="fontBtn" title="调整字号" aria-label="调整字号">Aa</button>
+                                <button class="font-btn" id="gifBtn" title="搜索GIF" aria-label="搜索GIF">🎬</button>
                                 <textarea
                                     id="chatInput"
                                     placeholder="输入消息... (Enter 发送, Shift+Enter 换行)"
@@ -393,9 +394,26 @@
         </div>
     </div>
 
+    <!-- GIF 搜索面板 -->
+    <div class="gif-panel" id="gifPanel">
+        <div class="gif-panel-inner">
+            <div class="gif-panel-head">
+                <span>🎬 搜索 GIF</span>
+                <button class="btn-icon" id="closeGifPanel">✕</button>
+            </div>
+            <div class="gif-search-row">
+                <input type="text" id="gifSearchInput" placeholder="输入关键词，比如：开心、生气、抱抱..." />
+                <button class="btn-primary gif-search-btn" id="gifSearchBtn">搜索</button>
+            </div>
+            <div class="gif-trending" id="gifTrending">加载中...</div>
+            <div class="gif-grid" id="gifGrid"></div>
+            <div class="gif-hint" id="gifHint">数据来源：Tenor</div>
+        </div>
+    </div>
+
     <!-- Toast 提示 -->
     <div class="toast" id="toast"></div>
 
-    <script src="js/app.js?v=59"></script>
+    <script src="js/app.js?v=60"></script>
 </body>
 </html>

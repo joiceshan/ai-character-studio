@@ -297,6 +297,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initWrite();
     initChatFab();
     initFontSize();
+    initGifPanel();
     updateUI();
 
     // 页面切后台/关闭时：如果归档定时器在排队，立即执行（主保存已经同步落盘了）
@@ -939,7 +940,14 @@ async function sendRawRequest(messages, instruction) {
 
     const fullMessages = [
         { role: 'system', content: '你是一个助手，负责生成自然的文字内容。' },
-        ...messages.filter(m => (m.role === 'user' || m.role === 'assistant') && !m.__uiOnly),
+        ...messages
+            .filter(m => (m.role === 'user' || m.role === 'assistant') && !m.__uiOnly)
+            .map(m => {
+                if (m.gifUrl && (!m.content || !m.content.trim())) {
+                    return { role: m.role, content: '[用户发送了一个 GIF 表情]' };
+                }
+                return m;
+            }),
         { role: 'user', content: instruction }
     ];
 
@@ -1019,7 +1027,15 @@ ${RATING_SAFETY_RULE}
     const fullMessages = [
         { role: 'system', content: systemPrompt },
         // 🔴 过滤 __uiOnly 的 fake user，绝不带给 API（防止污染 history）
-        ...messages.filter(m => (m.role === 'user' || m.role === 'assistant') && !m.__uiOnly)
+        // 🔴 gifUrl 消息如果 content 为空，替成占位符，AI 能理解是用户发了 GIF
+        ...messages
+            .filter(m => (m.role === 'user' || m.role === 'assistant') && !m.__uiOnly)
+            .map(m => {
+                if (m.gifUrl && (!m.content || !m.content.trim())) {
+                    return { role: m.role, content: '[用户发送了一个 GIF 表情]' };
+                }
+                return m;
+            })
     ];
 
     const url = `${State.api.baseUrl}/chat/completions`;
@@ -1070,6 +1086,161 @@ ${RATING_SAFETY_RULE}
 function closeSidebar() {
     document.getElementById('chatSidebar')?.classList.remove('open');
     document.getElementById('sidebarOverlay')?.classList.remove('show');
+}
+
+// ---------- GIF 搜索面板 ----------
+const GIF_CLIENT_KEY = 'ai-character-studio';  // Tenor 要求的 client_key，可自定义
+const GIF_TRENDING_TAGS = ['开心', '生气', '抱抱', '加油', '晚安', '早安', '爱你', '嘿嘿', '再见', '无聊'];
+
+function initGifPanel() {
+    const gifBtn = document.getElementById('gifBtn');
+    const closeBtn = document.getElementById('closeGifPanel');
+    const panel = document.getElementById('gifPanel');
+    const searchInput = document.getElementById('gifSearchInput');
+    const searchBtn = document.getElementById('gifSearchBtn');
+
+    if (!gifBtn || !panel) return;
+
+    gifBtn.addEventListener('click', openGifPanel);
+    closeBtn?.addEventListener('click', closeGifPanel);
+    panel.addEventListener('click', (e) => {
+        if (e.target.id === 'gifPanel') closeGifPanel();
+    });
+
+    // 搜索按钮
+    searchBtn?.addEventListener('click', () => {
+        const kw = searchInput.value.trim();
+        if (kw) doGifSearch(kw);
+    });
+    searchInput?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            const kw = searchInput.value.trim();
+            if (kw) doGifSearch(kw);
+        }
+    });
+
+    // ESC 关闭
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && panel.classList.contains('show')) closeGifPanel();
+    });
+}
+
+function openGifPanel() {
+    const panel = document.getElementById('gifPanel');
+    if (!panel) return;
+    // 依赖 active character
+    if (!getActiveChar()) {
+        showToast('请先选择一个角色', 'error');
+        return;
+    }
+    panel.classList.add('show');
+    document.getElementById('gifSearchInput')?.focus();
+    // 加载默认 trending 预览
+    const trending = document.getElementById('gifTrending');
+    if (trending) {
+        trending.innerHTML = GIF_TRENDING_TAGS.map(t =>
+            `<span class="trend-tag" data-kw="${escapeHtml(t)}">${escapeHtml(t)}</span>`
+        ).join('');
+        trending.querySelectorAll('.trend-tag').forEach(tag => {
+            tag.addEventListener('click', () => {
+                const kw = tag.dataset.kw;
+                const input = document.getElementById('gifSearchInput');
+                if (input) input.value = kw;
+                doGifSearch(kw);
+            });
+        });
+    }
+    // 默认加载一批 trending GIF
+    doGifSearch('', 18);
+}
+
+function closeGifPanel() {
+    document.getElementById('gifPanel')?.classList.remove('show');
+}
+
+async function doGifSearch(keyword, limit) {
+    const grid = document.getElementById('gifGrid');
+    if (!grid) return;
+    grid.innerHTML = '<div class="gif-loading">加载中...</div>';
+    grid.scrollTop = 0;
+
+    try {
+        const results = await searchGifs(keyword, limit || 18);
+        if (!results || results.length === 0) {
+            grid.innerHTML = '<div class="gif-empty">没找到匹配的 GIF，换个关键词试试？</div>';
+            return;
+        }
+        grid.innerHTML = results.map(r =>
+            `<img src="${escapeHtml(r.tiny)}" data-full="${escapeHtml(r.full)}" loading="lazy" alt="GIF">`
+        ).join('');
+        grid.querySelectorAll('img').forEach(img => {
+            img.addEventListener('click', () => {
+                const full = img.dataset.full;
+                if (full) sendGifMessage(full);
+            });
+        });
+    } catch (e) {
+        console.warn('GIF 搜索失败:', e);
+        grid.innerHTML = '<div class="gif-error">加载失败：' + (e.message || e) + '</div>';
+    }
+}
+
+async function searchGifs(keyword, limit) {
+    limit = Math.max(6, Math.min(limit || 18, 30));
+    let url = `https://tenor.googleapis.com/v2/search?q=${encodeURIComponent(keyword || 'trending')}&client_key=${GIF_CLIENT_KEY}&limit=${limit}&contentfilter=low&media_filter=minimal`;
+    if (!keyword) url = `https://tenor.googleapis.com/v2/search?q=trending&client_key=${GIF_CLIENT_KEY}&limit=${limit}&contentfilter=low&media_filter=minimal`;
+
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const data = await resp.json();
+    if (!data.results || !Array.isArray(data.results)) return [];
+    return data.results.map(r => ({
+        tiny: (r.media_formats?.tinygif?.url) || (r.media_formats?.gif?.preview || ''),
+        full: r.media_formats?.gif?.url || ''
+    })).filter(r => r.tiny && r.full);
+}
+
+function sendGifMessage(gifUrl) {
+    const c = getActiveChar();
+    if (!c) { showToast('请先选择一个角色', 'error'); return; }
+    if (State.sending) { showToast('TA 正在回复中，请稍候', 'error'); return; }
+
+    const id = State.activeCharacterId;
+    if (!State.conversations[id]) State.conversations[id] = [];
+    const msgs = State.conversations[id];
+
+    // 纯 GIF 消息：content 为空，gifUrl 存完整 URL
+    msgs.push({ role: 'user', content: '', gifUrl: gifUrl });
+    saveToStorage();
+    renderMessages();
+    scrollToBottom();
+    closeGifPanel();
+
+    // 自动让 TA 回复（GIF 也是一种用户输入）
+    State.sending = true;
+    setSendingUI(true);
+    const typingEl = addTypingIndicator();
+
+    // 构造给 API 的消息：gifUrl 消息会被 sendRequest 自动替成占位符
+    const msgsForApi = [...msgs];
+    sendRequest(msgsForApi).then(reply => {
+        typingEl.remove();
+        if (reply) {
+            msgs.push({ role: 'assistant', content: reply });
+            saveToStorage();
+            renderMessages();
+            scrollToBottom();
+        }
+    }).catch(err => {
+        typingEl.remove();
+        msgs.push({ role: 'error', content: '⚠️ 回复失败：' + err.message });
+        renderMessages();
+        scrollToBottom();
+        showToast('❌ ' + err.message, 'error');
+    }).finally(() => {
+        State.sending = false;
+        setSendingUI(false);
+    });
 }
 
 // ---------- 聊天页内容分级切换 ----------
@@ -1843,7 +2014,11 @@ function addTypingIndicator() {
     return div;
 }
 
-function createMessageDiv(role, content, index, onDelete) {
+function createMessageDiv(msg, index, onDelete) {
+    const role = msg.role;
+    const content = msg.content || '';
+    const gifUrl = msg.gifUrl || '';
+
     const div = document.createElement('div');
     if (role === 'error') {
         div.className = 'msg-error';
@@ -1883,7 +2058,17 @@ function createMessageDiv(role, content, index, onDelete) {
 
     const contentEl = document.createElement('div');
     contentEl.className = 'msg-content';
-    contentEl.innerHTML = formatMessage(content);
+
+    // 纯 GIF 消息（content 为空）：只渲染 img
+    if (gifUrl && !content.trim()) {
+        contentEl.innerHTML = `<img src="${escapeHtml(gifUrl)}" class="msg-gif" alt="GIF">`;
+    } else if (gifUrl) {
+        // 文字 + GIF：文字在前，GIF 在后
+        contentEl.innerHTML = formatMessage(content) + `<img src="${escapeHtml(gifUrl)}" class="msg-gif" alt="GIF">`;
+    } else {
+        contentEl.innerHTML = formatMessage(content);
+    }
+
     div.appendChild(avatarCol);
     div.appendChild(contentEl);
 
@@ -1895,7 +2080,7 @@ function renderMessages() {
     if (!container) return;
 
     const c = getActiveChar();
-    const allMsgs = getActiveMessages().filter(m => m && m.content && String(m.content).trim());
+    const allMsgs = getActiveMessages().filter(m => m && (m.content && String(m.content).trim() || m.gifUrl));
     const charId = c ? c.id : null;
     const WINDOW = 40;  // 🔴 止血：窗口降到 40 条，进一步减 DOM
 
@@ -1992,7 +2177,7 @@ function renderMessages() {
         for (; idx < end; idx++) {
             const msg = renderSet[idx];
             const globalIdx = allMsgs.length - finalSlice.length + idx;
-            const el = createMessageDiv(msg.role, msg.content, globalIdx, deleteAtIndex);
+            const el = createMessageDiv(msg, globalIdx, deleteAtIndex);
             container.appendChild(el);
         }
 

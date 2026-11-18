@@ -1016,7 +1016,7 @@ ${RATING_SAFETY_RULE}
 - 可以用 *动作描写* 或 *表情* 来表现神态，例如：*微微一笑* 没关系的
 - *xxx* 之间的内容是动作、表情、心理活动，不是直接说出来的台词
 - 台词部分直接写出来即可，不需要加引号
-- 当你想表达情绪（开心、害羞、生气、撒娇等），可以在回复末尾加 1-3 个 emoji，例如 😊 🫂 😳 🔥 💗。选最贴合心情的，不要滥用。
+- 当你想表达情绪，可以在回复末尾加一个 GIF 标签，格式是 [GIF:中文标签]，例如 [GIF:开心] [GIF:害羞] [GIF:亲亲] [GIF:性感]。可选标签：开心、害羞、生气、难过、抱抱、亲亲、晚安、早安、加油、再见、性感、惊讶、思考、调皮、吃饭、跳舞。每次回复最多加 1 个 GIF。
 
 请自然地回应，不要在回复中说明自己是在扮演角色。用该角色的口吻说话。`;
     }
@@ -1090,9 +1090,11 @@ function closeSidebar() {
 }
 
 // ---------- 表情 / 贴纸面板 ----------
-// 纯本地 + 用户上传，零外部依赖
+// gifs.json 从 GitHub Pages 同域加载，16 个情绪标签 × 约 24 张 GIF，全部 CDN 直连
+let GIF_LIBRARY = null;  // 运行时缓存
+
+// emoji unicode 列表（系统原生渲染）
 const EMOJI_LIST = [
-    // 表情
     '😀','😃','😄','😁','😆','😅','🤣','😂','🙂','🙃',
     '😉','😊','😇','🥰','😍','🤩','😘','😗','😚','😙',
     '🥲','😋','😛','😜','🤪','😝','🤑','🤗','🤭','🤫',
@@ -1101,25 +1103,30 @@ const EMOJI_LIST = [
     '😢','😭','😱','😖','😣','😞','😓','😩','😫','🥱',
     '😤','😡','😠','🤬','😈','👿','💀','☠️','💩','🤡',
     '👹','👺','👻','👽','👾','🤖','😺','😸','😹','😻',
-    // 手势
     '👍','👎','👌','🤌','🤏','✌️','🤞','🤟','🤘','🤙',
     '👈','👉','👆','🖕','👇','☝️','👋','🤚','🖐️','✋',
     '🖖','👐','🤲','🤝','🙏','✍️','💪','🦾','🦵','🦶',
-    // 爱心/装饰
     '❤️','🧡','💛','💚','💙','💜','🖤','🤍','🤎','💔',
     '❣️','💕','💞','💓','💗','💖','💘','💝','💟','💌',
-    // 活动
     '🔥','✨','⭐','🌟','💫','🎉','🎊','🎁','🎂','🍰',
     '🍕','🍔','🍟','🌮','🍣','🍜','☕','🍺','🍷','🥂',
-    // 旅行/物品
-    '🚗','✈️','🚀','🚢','🏠','🏖️','🎡','🎢','🎮','🎲',
-    '🎨','🎵','🎶','📷','💻','📱','🔔','📢','📝','📌',
-    // 动物
+    '🚗','✈️','🚀','🚢','🏠','🏖️','🎮','🎲','🎨','📷',
     '🐶','🐱','🐭','🐹','🐰','🦊','🐻','🐼','🐨','🐯',
-    '🦁','🐮','🐷','🐸','🐵','🐔','🐧','🐦','🦋','🐝',
-    // 国旗/其他
-    '🌈','☀️','🌙','⛅','☁️','❄️','☔','⚡','💧','🌊'
+    '🌈','☀️','🌙','⛅','❄️','☔','⚡','💧','🌊'
 ];
+
+// 从同域 gifs.json 加载 GIF 库
+async function loadGifLibrary() {
+    if (GIF_LIBRARY) return GIF_LIBRARY;
+    try {
+        const resp = await fetch('./gifs.json', { cache: 'no-cache' });
+        if (resp.ok) {
+            GIF_LIBRARY = await resp.json();
+            return GIF_LIBRARY;
+        }
+    } catch (e) { console.warn('gifs.json 加载失败:', e); }
+    return null;
+}
 
 function initGifPanel() {
     const gifBtn = document.getElementById('gifBtn');
@@ -1128,11 +1135,9 @@ function initGifPanel() {
 
     gifBtn.addEventListener('click', openGifPanel);
     document.getElementById('closeGifPanel')?.addEventListener('click', closeGifPanel);
-    panel.addEventListener('click', (e) => {
-        if (e.target.id === 'gifPanel') closeGifPanel();
-    });
+    panel.addEventListener('click', (e) => { if (e.target.id === 'gifPanel') closeGifPanel(); });
 
-    // Tab 切换（Emoji / 我的收藏）
+    // Tab 切换
     panel.querySelectorAll('.gif-tab').forEach(tab => {
         tab.addEventListener('click', () => {
             panel.querySelectorAll('.gif-tab').forEach(t => t.classList.remove('active'));
@@ -1141,7 +1146,8 @@ function initGifPanel() {
             panel.querySelectorAll('.gif-tab-content').forEach(c => c.style.display = 'none');
             const target = document.getElementById('gifTab-' + name);
             if (target) target.style.display = 'flex';
-            if (name === 'emoji') openEmojiTab();
+            if (name === 'gif') openGifTab();
+            else if (name === 'emoji') openEmojiTab();
             else if (name === 'mine') openMineStickersTab();
         });
     });
@@ -1174,17 +1180,63 @@ function openGifPanel() {
     if (!panel) return;
     if (!getActiveChar()) { showToast('请先选择一个角色', 'error'); return; }
     panel.classList.add('show');
-    // 默认切到 Emoji Tab
+    // 默认 GIF Tab
     const firstTab = panel.querySelector('.gif-tab.active') || panel.querySelector('.gif-tab');
-    const name = firstTab?.dataset.tab || 'emoji';
+    const name = firstTab?.dataset.tab || 'gif';
     panel.querySelectorAll('.gif-tab-content').forEach(c => c.style.display = 'none');
     document.getElementById('gifTab-' + name)?.style.removeProperty('display');
-    if (name === 'emoji') openEmojiTab();
+    if (name === 'gif') openGifTab();
+    else if (name === 'emoji') openEmojiTab();
     else if (name === 'mine') openMineStickersTab();
 }
 
-function closeGifPanel() {
-    document.getElementById('gifPanel')?.classList.remove('show');
+function closeGifPanel() { document.getElementById('gifPanel')?.classList.remove('show'); }
+
+// === GIF Tab：情绪标签 + 网格 ===
+let GIF_CURRENT_TAG = null;  // 当前选中的情绪标签
+
+async function openGifTab() {
+    const tagsEl = document.getElementById('gifTags');
+    const grid = document.getElementById('gifGrid');
+    const lib = await loadGifLibrary();
+
+    if (!lib) {
+        if (tagsEl) tagsEl.innerHTML = '';
+        if (grid) grid.innerHTML = '<div class="gif-empty">GIF 库加载失败<br>试试 Emoji Tab 或 我的收藏</div>';
+        return;
+    }
+
+    const tags = Object.keys(lib);
+    // 渲染标签按钮（第一行全显示，选中态）
+    if (tagsEl) {
+        tagsEl.innerHTML = tags.map(t => {
+            const count = lib[t]?.length || 0;
+            const selected = GIF_CURRENT_TAG === t ? ' data-selected="1"' : '';
+            return `<span class="trend-tag" data-tag="${escapeHtml(t)}"${selected}>${escapeHtml(t)} (${count})</span>`;
+        }).join('');
+        tagsEl.querySelectorAll('.trend-tag').forEach(btn => {
+            btn.addEventListener('click', () => {
+                GIF_CURRENT_TAG = btn.dataset.tag;
+                openGifTab();  // 重新渲染（会显示选中态 + 网格）
+            });
+        });
+    }
+
+    // 首次打开默认选第一个标签
+    if (!GIF_CURRENT_TAG || !lib[GIF_CURRENT_TAG]) GIF_CURRENT_TAG = tags[0];
+
+    const list = lib[GIF_CURRENT_TAG] || [];
+    if (grid) {
+        grid.innerHTML = list.map(g =>
+            `<img src="${escapeHtml(g.thumb)}" data-full="${escapeHtml(g.full)}" loading="lazy" alt="GIF">`
+        ).join('');
+        grid.querySelectorAll('img').forEach(img => {
+            img.addEventListener('click', () => {
+                const full = img.dataset.full;
+                if (full) sendGifMessage(full);
+            });
+        });
+    }
 }
 
 // === Emoji Tab ===
@@ -1203,19 +1255,24 @@ function openEmojiTab() {
 }
 
 function sendEmojiMessage(emoji) {
-    const c = getActiveChar();
-    if (!c) { showToast('请先选择一个角色', 'error'); return; }
-
+    if (!getActiveChar()) { showToast('请先选择一个角色', 'error'); return; }
     const id = State.activeCharacterId;
     if (!State.conversations[id]) State.conversations[id] = [];
     const msgs = State.conversations[id];
-
     msgs.push({ role: 'user', content: emoji });
-    saveToStorage();
-    renderMessages();
-    scrollToBottom();
+    saveToStorage(); renderMessages(); scrollToBottom();
     closeGifPanel();
+    if (!State.sending) triggerAssistantReply(msgs);
+}
 
+function sendGifMessage(fullUrl) {
+    if (!getActiveChar()) { showToast('请先选择一个角色', 'error'); return; }
+    const id = State.activeCharacterId;
+    if (!State.conversations[id]) State.conversations[id] = [];
+    const msgs = State.conversations[id];
+    msgs.push({ role: 'user', content: '', gifUrl: fullUrl });
+    saveToStorage(); renderMessages(); scrollToBottom();
+    closeGifPanel();
     if (!State.sending) triggerAssistantReply(msgs);
 }
 
@@ -1269,20 +1326,15 @@ function uploadMySticker(file) {
     const reader = new FileReader();
     reader.onload = (ev) => {
         const dataUrl = ev.target.result;
-        // GIF 不压缩（保留动画），其他压缩到 240x240 JPEG
         const doCompress = dataUrl.startsWith('data:image/gif')
             ? Promise.resolve(dataUrl)
             : compressImage(dataUrl, 240, 240, 0.8);
         doCompress.then(compressed => {
             const all = getMyStickers();
-            if (all.length >= 30) {
-                showToast('收藏已满 30 张', 'error');
-                return;
-            }
+            if (all.length >= 30) { showToast('收藏已满 30 张', 'error'); return; }
             all.push(compressed);
             try { localStorage.setItem('ai_my_stickers', JSON.stringify(all)); } catch (e) {
-                showToast('存储失败，可能空间不够', 'error');
-                return;
+                showToast('存储失败，可能空间不够', 'error'); return;
             }
             openMineStickersTab();
             showToast('✅ 已添加', 'success');
@@ -1309,19 +1361,13 @@ function compressImage(dataUrl, maxW, maxH, quality) {
 }
 
 function sendStickerMessage(dataUrl) {
-    const c = getActiveChar();
-    if (!c) { showToast('请先选择一个角色', 'error'); return; }
-
+    if (!getActiveChar()) { showToast('请先选择一个角色', 'error'); return; }
     const id = State.activeCharacterId;
     if (!State.conversations[id]) State.conversations[id] = [];
     const msgs = State.conversations[id];
-
     msgs.push({ role: 'user', content: '', stickerDataUrl: dataUrl });
-    saveToStorage();
-    renderMessages();
-    scrollToBottom();
+    saveToStorage(); renderMessages(); scrollToBottom();
     closeGifPanel();
-
     if (!State.sending) triggerAssistantReply(msgs);
 }
 
@@ -1336,15 +1382,12 @@ function triggerAssistantReply(msgs) {
         if (reply) {
             const finalReply = await processAIGifCommands(reply);
             msgs.push({ role: 'assistant', content: finalReply });
-            saveToStorage();
-            renderMessages();
-            scrollToBottom();
+            saveToStorage(); renderMessages(); scrollToBottom();
         }
     }).catch(err => {
         typingEl.remove();
         msgs.push({ role: 'error', content: '⚠️ 回复失败：' + err.message });
-        renderMessages();
-        scrollToBottom();
+        renderMessages(); scrollToBottom();
         showToast('❌ ' + err.message, 'error');
     }).finally(() => {
         State.sending = false;
@@ -1352,19 +1395,46 @@ function triggerAssistantReply(msgs) {
     });
 }
 
-// === AI 发 GIF（legacy：Tenor/Giphy 已弃用，保留作降级；AI 现在直接输出 emoji）===
+// === AI 发 GIF ===
+// AI 输出 [GIF:中文情绪标签] → 前端从 gifs.json 里随机取一张替换成 <img>
+// 可选标签：开心、害羞、生气、难过、抱抱、亲亲、晚安、早安、加油、再见、性感、惊讶、思考、调皮、吃饭、跳舞
 async function processAIGifCommands(text) {
     if (!text) return text;
-    // 匹配 [GIF:xxx]，尝试在线搜，失败就原样输出让用户看到
     const pattern = /\[gif[:：]([^\]]+)\]/gi;
     const matches = [...text.matchAll(pattern)];
     if (matches.length === 0) return text;
 
+    // 库还没加载就先加载
+    const lib = await loadGifLibrary();
+    if (!lib) {
+        // 没有库就把指令删掉保留纯文字
+        return text.replace(pattern, '').trim();
+    }
+
     let result = text;
     for (const m of matches) {
-        // Tenor/Giphy 已弃用，直接去掉指令保留纯文字上下文
-        // 或者尝试一次 tenorgif 备用域名
-        result = result.replace(m[0], '');
+        let tag = m[1].trim();
+        // 尝试精确匹配
+        let list = lib[tag];
+        // 模糊匹配：去掉"的"、"地"、"啊"、"啦"等语气词
+        if (!list) {
+            const cleaned = tag.replace(/[的了呢啊呀啦哈哦哟]/g, '');
+            list = lib[cleaned];
+        }
+        // 包含匹配：关键词包含标签名或标签名包含关键词
+        if (!list) {
+            for (const k of Object.keys(lib)) {
+                if (k.includes(tag) || tag.includes(k)) { list = lib[k]; break; }
+            }
+        }
+
+        if (list && list.length > 0) {
+            const picked = list[Math.floor(Math.random() * list.length)];
+            result = result.replace(m[0], `<img src="${picked.full}" class="msg-sticker" alt="GIF">`);
+        } else {
+            // 找不到对应标签 → 删掉指令
+            result = result.replace(m[0], '');
+        }
     }
     return result.trim();
 }

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#667eea">
     <title>AI Chat</title>
-    <link rel="stylesheet" href="css/style.css?v=64">
+    <link rel="stylesheet" href="css/style.css?v=66">
 </head>
 <body>
     <!-- 顶部导航 -->
@@ -402,10 +402,16 @@
                 <button class="btn-icon" id="closeGifPanel">✕</button>
             </div>
             <div class="gif-tabs">
-                <button class="gif-tab active" data-tab="emoji">Emoji</button>
+                <button class="gif-tab active" data-tab="gif">GIF</button>
+                <button class="gif-tab" data-tab="emoji">Emoji</button>
                 <button class="gif-tab" data-tab="mine">我的收藏</button>
             </div>
-            <div class="gif-tab-content" id="gifTab-emoji">
+            <div class="gif-tab-content" id="gifTab-gif">
+                <div class="gif-tags" id="gifTags"></div>
+                <div class="gif-grid" id="gifGrid"></div>
+                <div class="gif-hint" id="gifHint">点一下直接发送（情绪标签越多，AI 也会跟着发 GIF）</div>
+            </div>
+            <div class="gif-tab-content" id="gifTab-emoji" style="display:none;">
                 <div class="gif-emoji-grid" id="gifEmojiGrid"></div>
                 <div class="gif-hint">点一下直接发送</div>
             </div>
@@ -424,6 +430,6 @@
     <!-- Toast 提示 -->
     <div class="toast" id="toast"></div>
 
-    <script src="js/app.js?v=64"></script>
+    <script src="js/app.js?v=66"></script>
 </body>
 </html>

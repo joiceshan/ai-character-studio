@@ -2257,7 +2257,8 @@ function createMessageDiv(msg, index, onDelete) {
         delBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             if (confirm('删除这条消息？\n（删除后 AI 的上下文也会变化）')) {
-                onDelete(index);
+                // 🔴 传 msg 对象引用，不是索引
+                onDelete(msg);
             }
         });
         avatarCol.appendChild(delBtn);
@@ -2339,13 +2340,21 @@ function renderMessages() {
     // 全量重建（先清空，然后拆帧 append）
     container.innerHTML = '';
 
-    const deleteAtIndex = (i) => {
+    const deleteAtIndex = (msgRef) => {
         const id = State.activeCharacterId;
         if (!id) return;
-        State.conversations[id].splice(i, 1);
-        saveToStorage();
-        renderMessages();
-        scrollToBottom();
+        const arr = State.conversations[id];
+        // 🔴 用对象引用在原始数组里找位置 —— 避免 filter/WINDOW slice 造成索引错位
+        const realIdx = arr.indexOf(msgRef);
+        if (realIdx >= 0) {
+            arr.splice(realIdx, 1);
+            saveToStorage();
+            renderMessages();
+            scrollToBottom();
+        } else {
+            // 安全 fallback：重渲染（如果数组引用已经被替换）
+            renderMessages();
+        }
     };
 
     // 折叠按钮
@@ -2382,8 +2391,8 @@ function renderMessages() {
         const end = Math.min(idx + perFrame, renderSet.length);
         for (; idx < end; idx++) {
             const msg = renderSet[idx];
-            const globalIdx = allMsgs.length - finalSlice.length + idx;
-            const el = createMessageDiv(msg, globalIdx, deleteAtIndex);
+            // 🔴 传 msg 对象引用（不是索引），deleteAtIndex 用 indexOf 在原始数组里找
+            const el = createMessageDiv(msg, idx, deleteAtIndex);
             container.appendChild(el);
         }
 

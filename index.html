@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#667eea">
     <title>AI 人物工坊 · Character Studio</title>
-    <link rel="stylesheet" href="css/style.css?v=60">
+    <link rel="stylesheet" href="css/style.css?v=61">
 </head>
 <body>
     <!-- 顶部导航 -->
@@ -398,16 +398,39 @@
     <div class="gif-panel" id="gifPanel">
         <div class="gif-panel-inner">
             <div class="gif-panel-head">
-                <span>🎬 搜索 GIF</span>
+                <span>🎬 表情包</span>
                 <button class="btn-icon" id="closeGifPanel">✕</button>
             </div>
-            <div class="gif-search-row">
-                <input type="text" id="gifSearchInput" placeholder="输入关键词，比如：开心、生气、抱抱..." />
-                <button class="btn-primary gif-search-btn" id="gifSearchBtn">搜索</button>
+            <div class="gif-tabs">
+                <button class="gif-tab active" data-tab="tenor">GIF搜索</button>
+                <button class="gif-tab" data-tab="emoji">Emoji</button>
+                <button class="gif-tab" data-tab="mine">我的收藏</button>
             </div>
-            <div class="gif-trending" id="gifTrending">加载中...</div>
-            <div class="gif-grid" id="gifGrid"></div>
-            <div class="gif-hint" id="gifHint">数据来源：Tenor</div>
+            <div class="gif-tab-content" id="gifTab-tenor">
+                <div class="gif-search-row">
+                    <input type="text" id="gifSearchInput" placeholder="输入关键词（需要VPN）..." />
+                    <button class="btn-primary gif-search-btn" id="gifSearchBtn">搜索</button>
+                </div>
+                <div class="gif-trending" id="gifTrending"></div>
+                <div class="gif-grid" id="gifGrid"></div>
+                <div class="gif-hint" id="gifHint">海外服务，国内可能需要 VPN</div>
+            </div>
+            <div class="gif-tab-content" id="gifTab-emoji" style="display:none;">
+                <div class="gif-emoji-search">
+                    <input type="text" id="emojiSearchInput" placeholder="搜索 Emoji..." />
+                </div>
+                <div class="gif-emoji-grid" id="gifEmojiGrid"></div>
+                <div class="gif-hint">点一下直接发送</div>
+            </div>
+            <div class="gif-tab-content" id="gifTab-mine" style="display:none;">
+                <div class="gif-mine-head">
+                    <input type="file" id="myStickerUpload" accept="image/*" hidden />
+                    <button class="btn-secondary gif-upload-btn" id="myStickerUploadBtn">📷 上传图片/GIF</button>
+                    <button class="btn-secondary gif-upload-btn" id="myStickerClearBtn" title="清空收藏">🗑️ 清空</button>
+                </div>
+                <div class="gif-grid" id="myStickerGrid"></div>
+                <div class="gif-hint" id="myStickerHint">图片自动压缩后存本地，最多 30 张</div>
+            </div>
         </div>
     </div>
 

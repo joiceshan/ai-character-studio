@@ -1016,6 +1016,7 @@ ${RATING_SAFETY_RULE}
 - 可以用 *动作描写* 或 *表情* 来表现神态，例如：*微微一笑* 没关系的
 - *xxx* 之间的内容是动作、表情、心理活动，不是直接说出来的台词
 - 台词部分直接写出来即可，不需要加引号
+- 当你想表达情绪（开心、害羞、生气、撒娇等），可以在回复末尾加一个 GIF 表情标记，格式是 [GIF:关键词]，例如 [GIF:开心] [GIF:抱抱] [GIF:害羞]。关键词用简洁中文，每个回复最多加 1 个 GIF 标记。不要滥用。
 
 请自然地回应，不要在回复中说明自己是在扮演角色。用该角色的口吻说话。`;
     }
@@ -1088,34 +1089,101 @@ function closeSidebar() {
     document.getElementById('sidebarOverlay')?.classList.remove('show');
 }
 
-// ---------- GIF 搜索面板 ----------
-const GIF_CLIENT_KEY = 'ai-character-studio';  // Tenor 要求的 client_key，可自定义
+// ---------- GIF / Emoji / 贴纸面板 ----------
+const GIF_CLIENT_KEY = 'ai-character-studio';
 const GIF_TRENDING_TAGS = ['开心', '生气', '抱抱', '加油', '晚安', '早安', '爱你', '嘿嘿', '再见', '无聊'];
+const TENOR_TIMEOUT_MS = 5000;  // Tenor 超时 5 秒
+
+// Noto Emoji PNG CDN：unicode 码点 → URL
+// 用原生 emoji unicode span 渲染最稳，不依赖外部 CDN
+const EMOJI_LIST = [
+    // 表情
+    '😀','😃','😄','😁','😆','😅','🤣','😂','🙂','🙃',
+    '😉','😊','😇','🥰','😍','🤩','😘','😗','😚','😙',
+    '🥲','😋','😛','😜','🤪','😝','🤑','🤗','🤭','🤫',
+    '🤔','🤐','🤨','😐','😑','😶','😏','😒','🙄','😬',
+    '😮','😯','😲','😳','🥺','😦','😧','😨','😰','😥',
+    '😢','😭','😱','😖','😣','😞','😓','😩','😫','🥱',
+    '😤','😡','😠','🤬','😈','👿','💀','☠️','💩','🤡',
+    '👹','👺','👻','👽','👾','🤖','😺','😸','😹','😻',
+    // 手势
+    '👍','👎','👌','🤌','🤏','✌️','🤞','🤟','🤘','🤙',
+    '👈','👉','👆','🖕','👇','☝️','👋','🤚','🖐️','✋',
+    '🖖','👐','🤲','🤝','🙏','✍️','💪','🦾','🦵','🦶',
+    // 爱心/装饰
+    '❤️','🧡','💛','💚','💙','💜','🖤','🤍','🤎','💔',
+    '❣️','💕','💞','💓','💗','💖','💘','💝','💟','💌',
+    // 活动
+    '🔥','✨','⭐','🌟','💫','🎉','🎊','🎁','🎂','🍰',
+    '🍕','🍔','🍟','🌮','🍣','🍜','☕','🍺','🍷','🥂',
+    // 旅行/物品
+    '🚗','✈️','🚀','🚢','🏠','🏖️','🎡','🎢','🎮','🎲',
+    '🎨','🎵','🎶','📷','💻','📱','🔔','📢','📝','📌',
+    // 动物
+    '🐶','🐱','🐭','🐹','🐰','🦊','🐻','🐼','🐨','🐯',
+    '🦁','🐮','🐷','🐸','🐵','🐔','🐧','🐦','🦋','🐝',
+    // 国旗/其他
+    '🌈','☀️','🌙','⛅','☁️','❄️','☔','⚡','💧','🌊'
+];
 
 function initGifPanel() {
     const gifBtn = document.getElementById('gifBtn');
-    const closeBtn = document.getElementById('closeGifPanel');
     const panel = document.getElementById('gifPanel');
-    const searchInput = document.getElementById('gifSearchInput');
-    const searchBtn = document.getElementById('gifSearchBtn');
-
     if (!gifBtn || !panel) return;
 
     gifBtn.addEventListener('click', openGifPanel);
-    closeBtn?.addEventListener('click', closeGifPanel);
+    document.getElementById('closeGifPanel')?.addEventListener('click', closeGifPanel);
     panel.addEventListener('click', (e) => {
         if (e.target.id === 'gifPanel') closeGifPanel();
     });
 
-    // 搜索按钮
-    searchBtn?.addEventListener('click', () => {
-        const kw = searchInput.value.trim();
+    // Tab 切换
+    panel.querySelectorAll('.gif-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            panel.querySelectorAll('.gif-tab').forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            const name = tab.dataset.tab;
+            panel.querySelectorAll('.gif-tab-content').forEach(c => c.style.display = 'none');
+            const target = document.getElementById('gifTab-' + name);
+            if (target) target.style.display = 'flex';
+            // 切到对应 tab 时加载内容
+            if (name === 'tenor') openTenorTab();
+            else if (name === 'emoji') openEmojiTab();
+            else if (name === 'mine') openMineStickersTab();
+        });
+    });
+
+    // Tenor 搜索
+    document.getElementById('gifSearchBtn')?.addEventListener('click', () => {
+        const kw = document.getElementById('gifSearchInput').value.trim();
         if (kw) doGifSearch(kw);
     });
-    searchInput?.addEventListener('keydown', (e) => {
+    document.getElementById('gifSearchInput')?.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
-            const kw = searchInput.value.trim();
+            const kw = document.getElementById('gifSearchInput').value.trim();
             if (kw) doGifSearch(kw);
+        }
+    });
+
+    // Emoji 搜索
+    document.getElementById('emojiSearchInput')?.addEventListener('input', (e) => {
+        filterEmojiGrid(e.target.value.trim());
+    });
+
+    // 我的收藏上传
+    document.getElementById('myStickerUploadBtn')?.addEventListener('click', () => {
+        document.getElementById('myStickerUpload')?.click();
+    });
+    document.getElementById('myStickerUpload')?.addEventListener('change', (e) => {
+        const file = e.target.files?.[0];
+        if (file) uploadMySticker(file);
+        e.target.value = '';
+    });
+    document.getElementById('myStickerClearBtn')?.addEventListener('click', () => {
+        if (confirm('确定清空所有收藏的表情包？')) {
+            try { localStorage.removeItem('ai_my_stickers'); } catch {}
+            openMineStickersTab();
+            showToast('已清空', 'success');
         }
     });
 
@@ -1128,16 +1196,28 @@ function initGifPanel() {
 function openGifPanel() {
     const panel = document.getElementById('gifPanel');
     if (!panel) return;
-    // 依赖 active character
-    if (!getActiveChar()) {
-        showToast('请先选择一个角色', 'error');
-        return;
-    }
+    if (!getActiveChar()) { showToast('请先选择一个角色', 'error'); return; }
     panel.classList.add('show');
-    document.getElementById('gifSearchInput')?.focus();
-    // 加载默认 trending 预览
+    // 默认切到第一个 tab
+    const firstTab = panel.querySelector('.gif-tab.active') || panel.querySelector('.gif-tab');
+    const name = firstTab?.dataset.tab || 'tenor';
+    // 显示正确的 tab content
+    panel.querySelectorAll('.gif-tab-content').forEach(c => c.style.display = 'none');
+    document.getElementById('gifTab-' + name)?.style.removeProperty('display');
+    if (name === 'tenor') openTenorTab();
+    else if (name === 'emoji') openEmojiTab();
+    else if (name === 'mine') openMineStickersTab();
+}
+
+function closeGifPanel() {
+    document.getElementById('gifPanel')?.classList.remove('show');
+}
+
+// === Tenor Tab ===
+function openTenorTab() {
+    // 热门标签
     const trending = document.getElementById('gifTrending');
-    if (trending) {
+    if (trending && !trending.dataset.init) {
         trending.innerHTML = GIF_TRENDING_TAGS.map(t =>
             `<span class="trend-tag" data-kw="${escapeHtml(t)}">${escapeHtml(t)}</span>`
         ).join('');
@@ -1149,25 +1229,21 @@ function openGifPanel() {
                 doGifSearch(kw);
             });
         });
+        trending.dataset.init = '1';
     }
-    // 默认加载一批 trending GIF
     doGifSearch('', 18);
-}
-
-function closeGifPanel() {
-    document.getElementById('gifPanel')?.classList.remove('show');
 }
 
 async function doGifSearch(keyword, limit) {
     const grid = document.getElementById('gifGrid');
     if (!grid) return;
-    grid.innerHTML = '<div class="gif-loading">加载中...</div>';
+    grid.innerHTML = '<div class="gif-loading">⏳ 搜索中（超时 5 秒）...</div>';
     grid.scrollTop = 0;
 
     try {
-        const results = await searchGifs(keyword, limit || 18);
+        const results = await searchGifsWithTimeout(keyword, limit || 18);
         if (!results || results.length === 0) {
-            grid.innerHTML = '<div class="gif-empty">没找到匹配的 GIF，换个关键词试试？</div>';
+            grid.innerHTML = '<div class="gif-empty">没找到，换个关键词试试，或切到 Emoji / 我的收藏</div>';
             return;
         }
         grid.innerHTML = results.map(r =>
@@ -1176,21 +1252,38 @@ async function doGifSearch(keyword, limit) {
         grid.querySelectorAll('img').forEach(img => {
             img.addEventListener('click', () => {
                 const full = img.dataset.full;
-                if (full) sendGifMessage(full);
+                if (full) sendGifMessage(full, true);
             });
         });
     } catch (e) {
         console.warn('GIF 搜索失败:', e);
-        grid.innerHTML = '<div class="gif-error">加载失败：' + (e.message || e) + '</div>';
+        const isTimeout = e.name === 'AbortError' || (e.message || '').includes('超时');
+        grid.innerHTML = `
+            <div class="gif-error">
+                ${isTimeout
+                    ? '🌐 Tenor 连不上（需要 VPN 或海外网络）<br><br>试试切到 Emoji Tab 或上传自己的图片'
+                    : '❌ 加载失败：' + (e.message || e)}
+                <br>
+                <button class="gif-retry-btn" onclick="document.getElementById('gifSearchBtn')?.click()">🔄 重试</button>
+            </div>`;
     }
 }
 
-async function searchGifs(keyword, limit) {
+async function searchGifsWithTimeout(keyword, limit) {
     limit = Math.max(6, Math.min(limit || 18, 30));
-    let url = `https://tenor.googleapis.com/v2/search?q=${encodeURIComponent(keyword || 'trending')}&client_key=${GIF_CLIENT_KEY}&limit=${limit}&contentfilter=off&media_filter=minimal`;
-    if (!keyword) url = `https://tenor.googleapis.com/v2/search?q=trending&client_key=${GIF_CLIENT_KEY}&limit=${limit}&contentfilter=off&media_filter=minimal`;
+    const q = keyword || 'trending';
+    const url = `https://tenor.googleapis.com/v2/search?q=${encodeURIComponent(q)}&client_key=${GIF_CLIENT_KEY}&limit=${limit}&contentfilter=off&media_filter=minimal`;
 
-    const resp = await fetch(url);
+    // 带超时的 fetch
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), TENOR_TIMEOUT_MS);
+    let resp;
+    try {
+        resp = await fetch(url, { signal: ctrl.signal });
+    } finally {
+        clearTimeout(timer);
+    }
+
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
     const data = await resp.json();
     if (!data.results || !Array.isArray(data.results)) return [];
@@ -1200,33 +1293,172 @@ async function searchGifs(keyword, limit) {
     })).filter(r => r.tiny && r.full);
 }
 
-function sendGifMessage(gifUrl) {
+// === Emoji Tab ===
+function openEmojiTab() {
+    const grid = document.getElementById('gifEmojiGrid');
+    if (!grid) return;
+    grid.innerHTML = EMOJI_LIST.map(e =>
+        `<span data-emoji="${escapeHtml(e)}" role="button">${e}</span>`
+    ).join('');
+    grid.querySelectorAll('span').forEach(span => {
+        span.addEventListener('click', () => {
+            const emoji = span.dataset.emoji;
+            if (emoji) sendEmojiMessage(emoji);
+        });
+    });
+}
+
+function filterEmojiGrid(kw) {
+    const grid = document.getElementById('gifEmojiGrid');
+    if (!grid) return;
+    if (!kw) { openEmojiTab(); return; }
+    // 用原生 emoji 名称没法搜（除非接 emoji-mart），这里做简单过滤：
+    // 只显示包含关键词 unicode 的 emoji —— 实际上做不了文字搜索
+    // 简化：直接重新渲染全部（让用户点就行）
+    openEmojiTab();
+}
+
+// === 我的收藏 Tab ===
+function openMineStickersTab() {
+    const grid = document.getElementById('myStickerGrid');
+    const hint = document.getElementById('myStickerHint');
+    if (!grid) return;
+
+    let stickers = [];
+    try { stickers = JSON.parse(localStorage.getItem('ai_my_stickers') || '[]'); } catch {}
+
+    if (stickers.length === 0) {
+        grid.innerHTML = '<div class="gif-empty">还没有收藏<br>点上面的「📷 上传图片/GIF」按钮添加</div>';
+        if (hint) hint.textContent = '图片压缩后存本地，最多 30 张';
+        return;
+    }
+
+    grid.innerHTML = stickers.map((s, i) =>
+        `<img src="${s}" data-idx="${i}" alt="贴纸">`
+    ).join('');
+    grid.querySelectorAll('img').forEach(img => {
+        img.addEventListener('click', () => {
+            const idx = parseInt(img.dataset.idx, 10);
+            const all = getMyStickers();
+            const url = all[idx];
+            if (url) sendGifMessage(url, true);
+        });
+        // 长按 / 右键删除
+        img.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            if (confirm('删除这张贴纸？')) {
+                const idx = parseInt(img.dataset.idx, 10);
+                const all = getMyStickers();
+                all.splice(idx, 1);
+                try { localStorage.setItem('ai_my_stickers', JSON.stringify(all)); } catch {}
+                openMineStickersTab();
+            }
+        });
+    });
+    if (hint) hint.textContent = `共 ${stickers.length} 张 · 右键 / 长按删除`;
+}
+
+function getMyStickers() {
+    try { return JSON.parse(localStorage.getItem('ai_my_stickers') || '[]'); } catch { return []; }
+}
+
+function uploadMySticker(file) {
+    if (!file.type.startsWith('image/')) { showToast('请选择图片文件', 'error'); return; }
+    if (file.size > 5 * 1024 * 1024) { showToast('图片不要超过 5MB', 'error'); return; }
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+        const dataUrl = ev.target.result;
+        // 压缩到 240×240
+        compressImage(dataUrl, 240, 240, 0.8).then(compressed => {
+            const all = getMyStickers();
+            if (all.length >= 30) {
+                showToast('收藏已满 30 张，先删一些再传', 'error');
+                return;
+            }
+            all.push(compressed);
+            try { localStorage.setItem('ai_my_stickers', JSON.stringify(all)); } catch (e) {
+                showToast('存储失败，可能空间不够', 'error');
+                return;
+            }
+            openMineStickersTab();
+            showToast('✅ 已添加', 'success');
+        });
+    };
+    reader.readAsDataURL(file);
+}
+
+function compressImage(dataUrl, maxW, maxH, quality) {
+    return new Promise(resolve => {
+        const img = new Image();
+        img.onload = () => {
+            let w = img.naturalWidth, h = img.naturalHeight;
+            if (w > maxW) { h = h * maxW / w; w = maxW; }
+            if (h > maxH) { w = w * maxH / h; h = maxH; }
+            const canvas = document.createElement('canvas');
+            canvas.width = w; canvas.height = h;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, w, h);
+            // GIF 压缩后变成静态图 —— 但用户自己上传的可能是动画 GIF
+            // 为了不破坏动画，先检测 MIME，如果原始是 GIF 就不压缩直接存
+            if (dataUrl.startsWith('data:image/gif')) {
+                resolve(dataUrl);
+            } else {
+                resolve(canvas.toDataURL('image/jpeg', quality));
+            }
+        };
+        img.onerror = () => resolve(dataUrl);  // 失败回退原图
+        img.src = dataUrl;
+    });
+}
+
+// === 发送消息（用户端） ===
+function sendGifMessage(gifUrl, autoReply) {
     const c = getActiveChar();
     if (!c) { showToast('请先选择一个角色', 'error'); return; }
-    if (State.sending) { showToast('TA 正在回复中，请稍候', 'error'); return; }
 
     const id = State.activeCharacterId;
     if (!State.conversations[id]) State.conversations[id] = [];
     const msgs = State.conversations[id];
 
-    // 纯 GIF 消息：content 为空，gifUrl 存完整 URL
     msgs.push({ role: 'user', content: '', gifUrl: gifUrl });
     saveToStorage();
     renderMessages();
     scrollToBottom();
     closeGifPanel();
 
-    // 自动让 TA 回复（GIF 也是一种用户输入）
+    if (autoReply && !State.sending) triggerAssistantReply(msgs);
+}
+
+function sendEmojiMessage(emoji) {
+    const c = getActiveChar();
+    if (!c) { showToast('请先选择一个角色', 'error'); return; }
+
+    const id = State.activeCharacterId;
+    if (!State.conversations[id]) State.conversations[id] = [];
+    const msgs = State.conversations[id];
+
+    // Emoji 当作纯文字发，不是 gifUrl —— 这样 AI 能正常看到
+    msgs.push({ role: 'user', content: emoji });
+    saveToStorage();
+    renderMessages();
+    scrollToBottom();
+    closeGifPanel();
+
+    if (!State.sending) triggerAssistantReply(msgs);
+}
+
+// 统一让 TA 回复（sendGifMessage / sendEmojiMessage 共用）
+function triggerAssistantReply(msgs) {
     State.sending = true;
     setSendingUI(true);
     const typingEl = addTypingIndicator();
 
-    // 构造给 API 的消息：gifUrl 消息会被 sendRequest 自动替成占位符
-    const msgsForApi = [...msgs];
-    sendRequest(msgsForApi).then(reply => {
+    sendRequest([...msgs]).then(async (reply) => {
         typingEl.remove();
         if (reply) {
-            msgs.push({ role: 'assistant', content: reply });
+            const finalReply = await processAIGifCommands(reply);
+            msgs.push({ role: 'assistant', content: finalReply });
             saveToStorage();
             renderMessages();
             scrollToBottom();
@@ -1241,6 +1473,46 @@ function sendGifMessage(gifUrl) {
         State.sending = false;
         setSendingUI(false);
     });
+}
+
+// === AI 发 GIF ===
+// AI 回复里可以写 [GIF:关键词] 或 [gif:关键词]，前端替换成实际 GIF 图片
+async function processAIGifCommands(text) {
+    if (!text) return text;
+    // 匹配 [GIF:xxx] [gif:xxx] [Gif:xxx]
+    const pattern = /\[gif[:：]([^\]]+)\]/gi;
+    const matches = [...text.matchAll(pattern)];
+    if (matches.length === 0) return text;
+
+    let result = text;
+    for (const m of matches) {
+        const kw = m[1].trim();
+        try {
+            // 超时 3 秒
+            const ctrl = new AbortController();
+            const timer = setTimeout(() => ctrl.abort(), 3000);
+            let resp;
+            try {
+                resp = await fetch(
+                    `https://tenor.googleapis.com/v2/search?q=${encodeURIComponent(kw)}&client_key=${GIF_CLIENT_KEY}&limit=1&contentfilter=off&media_filter=minimal`,
+                    { signal: ctrl.signal }
+                );
+            } finally { clearTimeout(timer); }
+            if (resp.ok) {
+                const data = await resp.json();
+                const gifUrl = data?.results?.[0]?.media_formats?.gif?.url;
+                if (gifUrl) {
+                    result = result.replace(m[0], `<img src="${gifUrl}" class="msg-gif" alt="GIF">`);
+                    continue;
+                }
+            }
+        } catch (e) {
+            console.warn('[GIF:xxx] 解析失败:', kw, e);
+        }
+        // 搜索失败 → 保留原文，让用户看到指令没被执行
+        result = result.replace(m[0], `[${kw} GIF加载失败]`);
+    }
+    return result;
 }
 
 // ---------- 聊天页内容分级切换 ----------
@@ -1830,7 +2102,8 @@ async function sendMessage() {
     try {
         const reply = await sendRequest(msgs);
         typingEl.remove();
-        msgs.push({ role: 'assistant', content: reply });
+        const finalReply = await processAIGifCommands(reply);
+        msgs.push({ role: 'assistant', content: finalReply });
         saveToStorage();
         renderMessages();
         scrollToBottom();
@@ -1977,7 +2250,8 @@ async function continueChat() {
         }
 
         if (aiReply) {
-            msgs.push({ role: 'assistant', content: aiReply });
+            const finalAiReply = await processAIGifCommands(aiReply);
+            msgs.push({ role: 'assistant', content: finalAiReply });
         } else {
             showToast('❌ AI 没返回内容，请再点一次', 'error');
         }

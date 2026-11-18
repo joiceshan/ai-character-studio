@@ -1237,13 +1237,13 @@ function openTenorTab() {
 async function doGifSearch(keyword, limit) {
     const grid = document.getElementById('gifGrid');
     if (!grid) return;
-    grid.innerHTML = '<div class="gif-loading">⏳ 搜索中（超时 5 秒）...</div>';
+    grid.innerHTML = '<div class="gif-loading">⏳ 搜索中（Tenor → Giphy 双源）...</div>';
     grid.scrollTop = 0;
 
     try {
         const results = await searchGifsWithTimeout(keyword, limit || 18);
         if (!results || results.length === 0) {
-            grid.innerHTML = '<div class="gif-empty">没找到，换个关键词试试，或切到 Emoji / 我的收藏</div>';
+            grid.innerHTML = '<div class="gif-empty">没找到匹配的 GIF，换个关键词试试<br>或切 Emoji Tab</div>';
             return;
         }
         grid.innerHTML = results.map(r =>
@@ -1256,15 +1256,12 @@ async function doGifSearch(keyword, limit) {
             });
         });
     } catch (e) {
-        console.warn('GIF 搜索失败:', e);
-        const isTimeout = e.name === 'AbortError' || (e.message || '').includes('超时');
+        console.warn('GIF 搜索全部失败:', e);
         grid.innerHTML = `
             <div class="gif-error">
-                ${isTimeout
-                    ? '🌐 Tenor 连不上（需要 VPN 或海外网络）<br><br>试试切到 Emoji Tab 或上传自己的图片'
-                    : '❌ 加载失败：' + (e.message || e)}
-                <br>
-                <button class="gif-retry-btn" onclick="document.getElementById('gifSearchBtn')?.click()">🔄 重试</button>
+                🌐 所有 GIF 源都不可用<br>
+                Tenor 被拒绝 + Giphy 代理也连不上<br><br>
+                试试切 Emoji Tab 或上传自己的图片
             </div>`;
     }
 }
@@ -1272,24 +1269,53 @@ async function doGifSearch(keyword, limit) {
 async function searchGifsWithTimeout(keyword, limit) {
     limit = Math.max(6, Math.min(limit || 18, 30));
     const q = keyword || 'trending';
-    const url = `https://tenor.googleapis.com/v2/search?q=${encodeURIComponent(q)}&client_key=${GIF_CLIENT_KEY}&limit=${limit}&contentfilter=off&media_filter=minimal`;
 
-    // 带超时的 fetch
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), TENOR_TIMEOUT_MS);
-    let resp;
-    try {
-        resp = await fetch(url, { signal: ctrl.signal });
-    } finally {
-        clearTimeout(timer);
+    // 多源自动 fallback —— Tenor 403 / 超时 → 切 Giphy (via allorigins 免费代理)
+    const sources = [
+        { name: 'Tenor直连', fn: () => fetchTenorDirect(q, limit) },
+        { name: 'Giphy+代理', fn: () => fetchGiphyViaProxy(q, limit) },
+    ];
+
+    let lastErr = null;
+    for (const src of sources) {
+        try {
+            const ctrl = new AbortController();
+            const timer = setTimeout(() => ctrl.abort(), 6000);
+            let results;
+            try {
+                results = await src.fn(ctrl.signal);
+            } finally { clearTimeout(timer); }
+            if (results && results.length > 0) return results;
+        } catch (e) {
+            lastErr = e;
+            console.warn(`[GIF搜索] ${src.name} 失败:`, e.name === 'AbortError' ? '超时' : e.message);
+        }
     }
+    throw lastErr || new Error('所有源都不可用');
+}
 
-    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+// Tenor 直连（需要 VPN）
+async function fetchTenorDirect(q, limit) {
+    const url = `https://tenor.googleapis.com/v2/search?q=${encodeURIComponent(q)}&client_key=${GIF_CLIENT_KEY}&limit=${limit}&contentfilter=off&media_filter=minimal`;
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error('Tenor HTTP ' + resp.status);
     const data = await resp.json();
-    if (!data.results || !Array.isArray(data.results)) return [];
-    return data.results.map(r => ({
-        tiny: (r.media_formats?.tinygif?.url) || (r.media_formats?.gif?.preview || ''),
+    return (data.results || []).map(r => ({
+        tiny: r.media_formats?.tinygif?.url || r.media_formats?.gif?.preview || '',
         full: r.media_formats?.gif?.url || ''
+    })).filter(r => r.tiny && r.full);
+}
+
+// Giphy + allorigins 代理（国内大概率能通）
+async function fetchGiphyViaProxy(q, limit) {
+    const giphyUrl = `https://api.giphy.com/v1/gifs/search?q=${encodeURIComponent(q)}&api_key=dc6zaTOxFJmzC&limit=${limit}&rating=pg-13`;
+    const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(giphyUrl)}`;
+    const resp = await fetch(proxyUrl);
+    if (!resp.ok) throw new Error('Giphy代理 HTTP ' + resp.status);
+    const data = await resp.json();
+    return (data.data || []).map(r => ({
+        tiny: r.images?.fixed_width?.url || r.images?.preview_gif?.url || '',
+        full: r.images?.fixed_height?.url || r.images?.original?.url || ''
     })).filter(r => r.tiny && r.full);
 }
 
@@ -1479,7 +1505,6 @@ function triggerAssistantReply(msgs) {
 // AI 回复里可以写 [GIF:关键词] 或 [gif:关键词]，前端替换成实际 GIF 图片
 async function processAIGifCommands(text) {
     if (!text) return text;
-    // 匹配 [GIF:xxx] [gif:xxx] [Gif:xxx]
     const pattern = /\[gif[:：]([^\]]+)\]/gi;
     const matches = [...text.matchAll(pattern)];
     if (matches.length === 0) return text;
@@ -1487,32 +1512,61 @@ async function processAIGifCommands(text) {
     let result = text;
     for (const m of matches) {
         const kw = m[1].trim();
-        try {
-            // 超时 3 秒
-            const ctrl = new AbortController();
-            const timer = setTimeout(() => ctrl.abort(), 3000);
-            let resp;
-            try {
-                resp = await fetch(
-                    `https://tenor.googleapis.com/v2/search?q=${encodeURIComponent(kw)}&client_key=${GIF_CLIENT_KEY}&limit=1&contentfilter=off&media_filter=minimal`,
-                    { signal: ctrl.signal }
-                );
-            } finally { clearTimeout(timer); }
-            if (resp.ok) {
-                const data = await resp.json();
-                const gifUrl = data?.results?.[0]?.media_formats?.gif?.url;
-                if (gifUrl) {
-                    result = result.replace(m[0], `<img src="${gifUrl}" class="msg-gif" alt="GIF">`);
-                    continue;
-                }
-            }
-        } catch (e) {
-            console.warn('[GIF:xxx] 解析失败:', kw, e);
+        const gifUrl = await resolveGifUrl(kw, 3000);
+        if (gifUrl) {
+            result = result.replace(m[0], `<img src="${gifUrl}" class="msg-gif" alt="GIF">`);
+        } else {
+            result = result.replace(m[0], `[${kw} GIF加载失败]`);
         }
-        // 搜索失败 → 保留原文，让用户看到指令没被执行
-        result = result.replace(m[0], `[${kw} GIF加载失败]`);
     }
     return result;
+}
+
+// 根据关键词找到一个 GIF URL（Tenor → Giphy 双源 fallback）
+async function resolveGifUrl(keyword, perSourceTimeout) {
+    perSourceTimeout = perSourceTimeout || 3000;
+    const sources = [
+        () => fetchSingleTenor(keyword, perSourceTimeout),
+        () => fetchSingleGiphy(keyword, perSourceTimeout),
+    ];
+    for (const src of sources) {
+        try {
+            const url = await src();
+            if (url) return url;
+        } catch (e) {
+            console.warn('[resolveGifUrl]', keyword, e.message);
+        }
+    }
+    return null;
+}
+
+async function fetchSingleTenor(q, timeout) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeout);
+    let resp;
+    try {
+        resp = await fetch(
+            `https://tenor.googleapis.com/v2/search?q=${encodeURIComponent(q)}&client_key=${GIF_CLIENT_KEY}&limit=1&contentfilter=off&media_filter=minimal`,
+            { signal: ctrl.signal }
+        );
+    } finally { clearTimeout(timer); }
+    if (!resp.ok) throw new Error('Tenor ' + resp.status);
+    const data = await resp.json();
+    return data?.results?.[0]?.media_formats?.gif?.url || null;
+}
+
+async function fetchSingleGiphy(q, timeout) {
+    const giphyUrl = `https://api.giphy.com/v1/gifs/search?q=${encodeURIComponent(q)}&api_key=dc6zaTOxFJmzC&limit=1&rating=pg-13`;
+    const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(giphyUrl)}`;
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeout);
+    let resp;
+    try {
+        resp = await fetch(proxyUrl, { signal: ctrl.signal });
+    } finally { clearTimeout(timer); }
+    if (!resp.ok) throw new Error('Giphy ' + resp.status);
+    const data = await resp.json();
+    return data?.data?.[0]?.images?.fixed_height?.url || data?.data?.[0]?.images?.original?.url || null;
 }
 
 // ---------- 聊天页内容分级切换 ----------

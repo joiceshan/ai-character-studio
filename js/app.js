@@ -1024,7 +1024,7 @@ ${RATING_SAFETY_RULE}
 - 可以用 *动作描写* 或 *表情* 来表现神态，例如：*微微一笑* 没关系的
 - *xxx* 之间的内容是动作、表情、心理活动，不是直接说出来的台词
 - 台词部分直接写出来即可，不需要加引号
-- 当你想表达情绪，可以在回复末尾加一个 GIF 标签，格式是 [GIF:中文标签]，例如 [GIF:开心] [GIF:害羞] [GIF:亲亲] [GIF:性感]。可选标签：开心、害羞、生气、难过、抱抱、亲亲、晚安、早安、加油、再见、性感、惊讶、思考、调皮、吃饭、跳舞。每次回复最多加 1 个 GIF。
+- 当你想表达情绪，可以在回复末尾加一个 GIF 标签，格式是 [GIF:中文标签]，例如 [GIF:害羞] [GIF:亲亲] [GIF:性感]。可选标签：开心、害羞、生气、难过、抱抱、亲亲、晚安、早安、加油、再见、性感、惊讶、思考、调皮、吃饭、跳舞、傲娇、委屈、比心。每次回复最多加 1 个 GIF。
 
 请自然地回应，不要在回复中说明自己是在扮演角色。用该角色的口吻说话。`;
     }
@@ -1234,8 +1234,14 @@ async function openGifTab() {
     if (!GIF_CURRENT_TAG || !lib[GIF_CURRENT_TAG]) GIF_CURRENT_TAG = tags[0];
 
     const list = lib[GIF_CURRENT_TAG] || [];
+    // 🔴 每次打开面板或切换标签 → Fisher-Yates 随机打乱
+    const shuffled = [...list];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
     if (grid) {
-        grid.innerHTML = list.map(g =>
+        grid.innerHTML = shuffled.map(g =>
             `<img src="${escapeHtml(g.thumb)}" data-full="${escapeHtml(g.full)}" loading="lazy" alt="GIF">`
         ).join('');
         grid.querySelectorAll('img').forEach(img => {

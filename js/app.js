@@ -946,17 +946,29 @@ async function sendRawRequest(messages, instruction) {
         throw new Error('请先在「API」页面配置接口');
     }
 
+    // 🔴 关键修复：history 里的消息加角色标签，让 AI 绝不搞混谁是谁
+    const labeledHistory = messages
+        .filter(m => (m.role === 'user' || m.role === 'assistant') && !m.__uiOnly)
+        .map(m => {
+            let content = m.content || '';
+            if ((m.gifUrl || m.stickerDataUrl) && (!content || !content.trim())) {
+                content = '[发送了一个表情/贴纸]';
+            }
+            if (m.role === 'assistant') {
+                return { role: 'user', content: `【AI角色说】${content}` };
+            } else {
+                return { role: 'user', content: `【你（真人用户）之前说过】${content}` };
+            }
+        });
+
+    // 把所有历史消息合并成一条长文，避免多条 user role 混在一起
+    const historyText = labeledHistory.length > 0
+        ? labeledHistory.map(m => m.content).join('\n')
+        : '(这是你第一次和 AI 角色聊天，之前没有历史对话)';
+
     const fullMessages = [
-        { role: 'system', content: '你是一个助手，负责生成自然的文字内容。' },
-        ...messages
-            .filter(m => (m.role === 'user' || m.role === 'assistant') && !m.__uiOnly)
-            .map(m => {
-                if ((m.gifUrl || m.stickerDataUrl) && (!m.content || !m.content.trim())) {
-                    return { role: m.role, content: '[用户发送了一个表情/贴纸]' };
-                }
-                return m;
-            }),
-        { role: 'user', content: instruction }
+        { role: 'system', content: '你是一个正在和 AI 角色聊天的真人用户。你的说话风格就是普通、自然、像真人那样，不要像 AI，不要像写小说，不要加括号动作描写，不要加引号。你就是一个真实的人。' },
+        { role: 'user', content: `${historyText}\n\n---\n现在轮到你（真人用户）说话了。${instruction}` }
     ];
 
     const url = `${State.api.baseUrl}/chat/completions`;
@@ -1036,12 +1048,18 @@ ${RATING_SAFETY_RULE}
     const fullMessages = [
         { role: 'system', content: systemPrompt },
         // 🔴 过滤 __uiOnly 的 fake user，绝不带给 API（防止污染 history）
-        // 🔴 贴纸消息（gifUrl / stickerDataUrl）如果 content 为空，替成占位符让 AI 理解
+        // 🔴 贴纸消息智能处理：有情绪标签就用它，没描述才用通用占位符
         ...messages
             .filter(m => (m.role === 'user' || m.role === 'assistant') && !m.__uiOnly)
             .map(m => {
-                if ((m.gifUrl || m.stickerDataUrl) && (!m.content || !m.content.trim())) {
-                    return { role: m.role, content: '[用户发送了一个表情/贴纸]' };
+                if (m.gifUrl || m.stickerDataUrl) {
+                    if (m.gifTag) {
+                        return { role: m.role, content: `[${m.role === 'user' ? '用户' : '你'}发送了一个${m.gifTag}表情]` };
+                    }
+                    if (m.content && m.content.trim()) {
+                        return { role: m.role, content: `${m.content.trim()} [附带表情]` };
+                    }
+                    return { role: m.role, content: '[发送了一个表情/贴纸]' };
                 }
                 return m;
             })
@@ -1284,7 +1302,10 @@ function sendGifMessage(fullUrl) {
     const id = State.activeCharacterId;
     if (!State.conversations[id]) State.conversations[id] = [];
     const msgs = State.conversations[id];
-    msgs.push({ role: 'user', content: '', gifUrl: fullUrl });
+    // 🔴 把当前情绪标签名带进 content，让 AI 知道是什么表情
+    const tagName = GIF_CURRENT_TAG || '';
+    const content = tagName ? `[${tagName}表情]` : '';
+    msgs.push({ role: 'user', content, gifUrl: fullUrl, gifTag: tagName });
     saveToStorage(); renderMessages(); scrollToBottom();
     closeGifPanel();
     if (!State.sending) triggerAssistantReply(msgs);
@@ -2273,8 +2294,9 @@ function createMessageDiv(msg, index, onDelete) {
     const contentEl = document.createElement('div');
     contentEl.className = 'msg-content';
 
-    // 纯贴纸消息（content 为空）：只渲染 img
-    if (stickerUrl && !content.trim()) {
+    // 纯贴纸消息 / content 是 gifTag 占位符（[害羞表情] 这种自动生成的）：只渲染 img
+    const isAutoTagContent = /^\[.+表情\]$/.test(content.trim());
+    if (stickerUrl && (!content.trim() || isAutoTagContent)) {
         contentEl.innerHTML = `<img src="${escapeHtml(stickerUrl)}" class="msg-sticker" alt="贴纸">`;
     } else if (stickerUrl) {
         contentEl.innerHTML = formatMessage(content) + `<img src="${escapeHtml(stickerUrl)}" class="msg-sticker" alt="贴纸">`;

@@ -7,6 +7,7 @@ const State = {
     characters: [],             // 所有已保存的角色 [{id, avatar, customAvatar, name, identity, ageGroup, personality, background, greeting, createdAt}]
     activeCharacterId: null,    // 当前选中角色 id
     conversations: {},          // { characterId: [{role, content}, ...] }
+    conversationPrefs: {},      // { characterId: '偏好文本' }  对话级偏好设置
     api: {
         provider: 'custom',
         baseUrl: '',
@@ -117,6 +118,7 @@ function saveToStorage() {
         localStorage.setItem('ai_active_character', State.activeCharacterId || '');
         localStorage.setItem('ai_conversations', JSON.stringify(convsForStorage));
         localStorage.setItem('ai_api', JSON.stringify(State.api));
+        localStorage.setItem('ai_conversation_prefs', JSON.stringify(State.conversationPrefs || {}));
 
         refreshWriteCharSelect();
 
@@ -193,6 +195,8 @@ function loadFromStorage() {
         if (active) State.activeCharacterId = active || null;
         if (convs) State.conversations = JSON.parse(convs);
         if (api) State.api = { ...State.api, ...JSON.parse(api) };
+        const prefs = localStorage.getItem('ai_conversation_prefs');
+        if (prefs) { try { State.conversationPrefs = JSON.parse(prefs); } catch {} }
 
         // 向后兼容：把旧的单 character 结构迁移进来
         const legacyChar = localStorage.getItem('ai_character');
@@ -453,6 +457,40 @@ function selectCharacter(id) {
     State.activeCharacterId = id;
     saveToStorage();
     updateUI();
+    refreshPrefUI();  // 切换角色时同步加载对应偏好
+}
+
+// 把当前角色的偏好显示到面板 textarea + 更新按钮标题
+function refreshPrefUI() {
+    const id = State.activeCharacterId;
+    const textarea = document.getElementById('prefText');
+    const prefBtn = document.getElementById('prefBtn');
+    if (id && textarea) {
+        textarea.value = State.conversationPrefs[id] || '';
+    }
+    // 按钮上显示小标记：有偏好时加个红点
+    if (prefBtn) {
+        prefBtn.style.position = 'relative';
+        const has = id && State.conversationPrefs[id] && State.conversationPrefs[id].trim();
+        prefBtn.innerHTML = has
+            ? '🎯<span style="position:absolute;top:4px;right:4px;width:6px;height:6px;background:#ff6b6b;border-radius:50%;"></span>'
+            : '🎯';
+    }
+}
+
+// 保存偏好到 State + localStorage
+function saveCurrentPref() {
+    const id = State.activeCharacterId;
+    if (!id) { showToast('请先选择角色', 'error'); return; }
+    const val = (document.getElementById('prefText')?.value || '').trim();
+    if (!val) {
+        delete State.conversationPrefs[id];
+    } else {
+        State.conversationPrefs[id] = val;
+    }
+    saveToStorage();
+    refreshPrefUI();
+    showToast('偏好已保存，接下来 AI 会按你的偏好回复', 'success');
 }
 
 function createNewCharacterAndEdit() {
@@ -1061,6 +1099,8 @@ ${RATING_SAFETY_RULE}
 - *xxx* 之间的内容是动作、表情、心理活动，不是直接说出来的台词
 - 台词部分直接写出来即可，不需要加引号${getGifInstruction(resolveGifFrequency(c))}
 
+${State.conversationPrefs[c.id] ? `【用户偏好】：${State.conversationPrefs[c.id]}\n请在对话中自然地体现以上用户偏好，不要生硬地逐条回应。` : ''}
+
 请自然地回应，不要在回复中说明自己是在扮演角色。用该角色的口吻说话。`;
     }
 
@@ -1607,6 +1647,26 @@ function initChat() {
             openClearSheet();
         });
     }
+
+    // 🎯 偏好面板
+    const prefBtn = document.getElementById('prefBtn');
+    const prefPanel = document.getElementById('prefPanel');
+    const prefClose = document.getElementById('prefClose');
+    const prefSave = document.getElementById('prefSave');
+    if (prefBtn && prefPanel) {
+        prefBtn.addEventListener('click', () => {
+            if (!State.activeCharacterId) { showToast('请先选择角色', 'error'); return; }
+            const visible = prefPanel.style.display !== 'none' && prefPanel.style.display !== '';
+            if (visible) {
+                prefPanel.style.display = 'none';
+            } else {
+                refreshPrefUI();
+                prefPanel.style.display = 'block';
+            }
+        });
+    }
+    if (prefClose) prefClose.addEventListener('click', () => { prefPanel.style.display = 'none'; });
+    if (prefSave) prefSave.addEventListener('click', () => { saveCurrentPref(); prefPanel.style.display = 'none'; });
 }
 
 // ---------- 删除对话：底部抽屉（动态挂到 body，避免被父级布局裁切） ----------

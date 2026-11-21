@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#667eea">
     <title>AI Chat</title>
-    <link rel="stylesheet" href="css/style.css?v=78">
+    <link rel="stylesheet" href="css/style.css?v=81">
 </head>
 <body>
     <!-- 顶部导航 -->
@@ -74,15 +74,25 @@
                         <button class="btn-icon" id="clearChatBtn" title="删除对话内容">🗑️</button>
                     </div>
 
-                    <!-- 偏好编辑面板 -->
+                    <!-- 对话设定面板 -->
                     <div class="pref-panel" id="prefPanel" style="display:none;">
                         <div class="pref-header">
-                            <span>🎯 我的偏好（当前对话）</span>
+                            <span>🎯 对话设定</span>
                             <button class="btn-icon-sm" id="prefClose" title="关闭">✕</button>
                         </div>
-                        <textarea id="prefText" rows="3" placeholder="写下你的偏好，例如：&#10;- 喜欢轻松搞笑的对话风格&#10;- 希望 TA 主动一点&#10;- 不要太正式，像朋友聊天"></textarea>
+
+                        <div class="pref-section">
+                            <label class="pref-label">🎯 我的偏好</label>
+                            <textarea id="prefText" rows="2" placeholder="你希望 TA 怎么跟你聊？例如：&#10;- 喜欢轻松搞笑，不要太正式&#10;- 希望 TA 主动一点&#10;- 说话可以亲密一点"></textarea>
+                        </div>
+
+                        <div class="pref-section">
+                            <label class="pref-label">📝 TA 当前状态</label>
+                            <textarea id="moodText" rows="2" placeholder="TA 此刻的情绪/状态，用来修正偏离：&#10;- 现在有点生气，说话带刺&#10;- 今天特别想你，语气要甜&#10;- 刚睡醒，迷迷糊糊的"></textarea>
+                        </div>
+
                         <div class="pref-footer">
-                            <span class="hint">会影响接下来 AI 的回复内容偏好</span>
+                            <span class="hint">随时可改，下一条回复就生效</span>
                             <button class="btn-save-sm" id="prefSave">保存</button>
                         </div>
                     </div>
@@ -306,6 +316,11 @@
                 </div>
 
                 <div class="form-group">
+                    <label>人物侧写（基础）</label>
+                    <textarea id="charProfile" placeholder="外貌细节、习惯小动作、说话节奏、眼神、穿着偏好、口头禅等稳定特征&#10;例如：身高162，长及肩的卷发，笑起来有梨涡，紧张时会摸耳垂&#10;💡 聊天中的临时情绪/状态修正 → 点聊天区 🎯 按钮"></textarea>
+                </div>
+
+                <div class="form-group">
                     <label>第一印象（可选）</label>
                     <input type="text" id="charGreeting" placeholder="TA 跟你打招呼的第一句话&#10;可包含 *动作描写*，例如：*微微歪头* 你好呀" />
                 </div>
@@ -393,6 +408,15 @@
                     <small class="hint">AI 回复末尾自动加 [GIF:标签]，前端替换成动图</small>
                 </div>
 
+                <div class="form-group">
+                    <label>
+                        🔥 深层模式
+                        <span id="adminModeBadge" class="admin-badge" style="display:none;">已解锁</span>
+                    </label>
+                    <button class="btn-secondary btn-large" id="adminLoginBtn" style="margin-top:6px;">🔐 解锁深层模式</button>
+                    <small class="hint">跳过所有安全限制 + 最开放创作。需要密码（默认密码在源码里可以改）</small>
+                </div>
+
                 <button class="btn-primary btn-large" id="testApiBtn">🔗 测试连接</button>
 
                 <div class="api-status" id="apiStatus" style="margin-top:12px;"></div>
@@ -469,6 +493,6 @@
     <!-- Toast 提示 -->
     <div class="toast" id="toast"></div>
 
-    <script src="js/app.js?v=78"></script>
+    <script src="js/app.js?v=81"></script>
 </body>
 </html>

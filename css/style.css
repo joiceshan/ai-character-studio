@@ -604,6 +604,68 @@ input, textarea, select {
 }
 .btn-save-sm:hover { opacity: 0.88; }
 
+/* 深层模式徽章 */
+.admin-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    background: linear-gradient(135deg, #ff6b6b, #ee5a24);
+    color: white;
+    font-size: 11px;
+    font-weight: 600;
+    border-radius: 10px;
+    margin-left: 6px;
+    animation: pulseBadge 2s ease-in-out infinite;
+}
+@keyframes pulseBadge {
+    0%,100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+
+/* 深层模式解锁状态下页面整体微微泛红 */
+body.admin-unlocked .chat-header-bar::after {
+    content: '🔥 深层模式';
+    position: absolute;
+    top: 50%;
+    right: 12px;
+    transform: translateY(-50%);
+    padding: 2px 10px;
+    background: linear-gradient(135deg, #ff6b6b, #ee5a24);
+    color: white;
+    font-size: 10px;
+    font-weight: 600;
+    border-radius: 8px;
+    z-index: 10;
+}
+
+.pref-section {
+    margin-bottom: 10px;
+}
+.pref-label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: #555;
+    margin-bottom: 4px;
+}
+.pref-section textarea {
+    width: 100%;
+    border: 1px solid rgba(102,126,234,0.25);
+    border-radius: 8px;
+    padding: 7px 10px;
+    font-size: 12.5px;
+    font-family: inherit;
+    resize: vertical;
+    background: rgba(255,255,255,0.7);
+    color: #333;
+    line-height: 1.5;
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+.pref-section textarea:focus {
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102,126,234,0.15);
+}
+
 /* 消息列表 */
 .chat-messages {
     flex: 1;
@@ -635,7 +697,7 @@ input, textarea, select {
 
 .message {
     display: flex;
-    gap: 10px;
+    gap: 6px;
 }
 
 /* 只有新出现的那一条才播放入场动画，避免整页消息同时动画导致卡顿 */
@@ -694,9 +756,9 @@ input, textarea, select {
 
 .msg-content {
     max-width: 75%;
-    padding: 12px 16px;
+    padding: 10px 14px;
     border-radius: 16px;
-    line-height: 1.7;
+    line-height: 1.5;
     white-space: pre-wrap;
     word-break: break-word;
 }
@@ -715,7 +777,7 @@ input, textarea, select {
 }
 
 .msg-content p {
-    margin-bottom: 8px;
+    margin-bottom: 4px;
 }
 
 .msg-content p:last-child {

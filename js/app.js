@@ -2658,7 +2658,7 @@ function initChatFab() {
     });
 }
 
-// ---------- 聊天字号调节 ----------
+// ---------- 聊天字号 + 行间距调节 ----------
 const FONT_SIZE_OPTIONS = [
     { label: '小', px: 13 },
     { label: '标准', px: 15 },
@@ -2667,15 +2667,32 @@ const FONT_SIZE_OPTIONS = [
     { label: '巨大', px: 22 }
 ];
 
+const LINE_HEIGHT_OPTIONS = [
+    { label: '紧凑', v: 1.3 },
+    { label: '稍紧', v: 1.4 },
+    { label: '标准', v: 1.5 },
+    { label: '宽松', v: 1.7 },
+    { label: '很松', v: 1.9 }
+];
+
 function applyFontSize(px) {
     document.documentElement.style.setProperty('--chat-font-size', px + 'px');
     try { localStorage.setItem('ai_font_size', String(px)); } catch (e) {}
+}
+
+function applyLineHeight(v) {
+    document.documentElement.style.setProperty('--chat-line-height', v);
+    try { localStorage.setItem('ai_line_height', String(v)); } catch (e) {}
 }
 
 function initFontSize() {
     let saved = parseInt(localStorage.getItem('ai_font_size') || '', 10);
     if (!Number.isFinite(saved) || saved < 10 || saved > 30) saved = 15;
     applyFontSize(saved);
+
+    let lh = parseFloat(localStorage.getItem('ai_line_height') || '');
+    if (!Number.isFinite(lh) || lh < 1.0 || lh > 2.5) lh = 1.5;
+    applyLineHeight(lh);
 
     const btn = document.getElementById('fontBtn');
     if (!btn) return;
@@ -2684,6 +2701,7 @@ function initFontSize() {
 
 function openFontSheet() {
     const current = parseInt(localStorage.getItem('ai_font_size') || '', 10) || 15;
+    const curLh = parseFloat(localStorage.getItem('ai_line_height') || '') || 1.5;
 
     const overlay = document.createElement('div');
     overlay.className = 'sheet-overlay';
@@ -2691,12 +2709,24 @@ function openFontSheet() {
     sheet.className = 'sheet';
     sheet.innerHTML = `
         <div class="sheet-handle"></div>
-        <div class="sheet-title">调整聊天字号</div>
-        <div class="sheet-sub">当前：${current}px</div>
-        ${FONT_SIZE_OPTIONS.map(o => `
-            <button class="sheet-item" data-px="${o.px}">
-                ${o.label}（${o.px}px）${o.px === current ? ' ✓' : ''}
-            </button>`).join('')}
+        <div class="sheet-title">文字显示</div>
+
+        <div class="sheet-section">
+            <div class="sheet-section-title">字号 · 当前 ${current}px</div>
+            ${FONT_SIZE_OPTIONS.map(o => `
+                <button class="sheet-item" data-px="${o.px}">
+                    ${o.label}（${o.px}px）${o.px === current ? ' ✓' : ''}
+                </button>`).join('')}
+        </div>
+
+        <div class="sheet-section">
+            <div class="sheet-section-title">行间距 · 当前 ${curLh}</div>
+            ${LINE_HEIGHT_OPTIONS.map(o => `
+                <button class="sheet-item" data-lh="${o.v}">
+                    ${o.label}（${o.v}）${o.v === curLh ? ' ✓' : ''}
+                </button>`).join('')}
+        </div>
+
         <button class="sheet-cancel">取消</button>
     `;
 
@@ -2707,12 +2737,18 @@ function openFontSheet() {
     overlay.addEventListener('click', close);
     sheet.querySelector('.sheet-cancel').addEventListener('click', close);
 
-    sheet.querySelectorAll('.sheet-item').forEach(item => {
+    sheet.querySelectorAll('[data-px]').forEach(item => {
         item.addEventListener('click', () => {
-            const px = parseInt(item.dataset.px, 10);
-            applyFontSize(px);
-            showToast(`字号已设为 ${px}px`, 'success');
+            applyFontSize(parseInt(item.dataset.px, 10));
             close();
+            openFontSheet();  // 刷新面板显示当前状态
+        });
+    });
+    sheet.querySelectorAll('[data-lh]').forEach(item => {
+        item.addEventListener('click', () => {
+            applyLineHeight(parseFloat(item.dataset.lh));
+            close();
+            openFontSheet();
         });
     });
 }

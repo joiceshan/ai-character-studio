@@ -66,7 +66,7 @@ const RATING_MAP = {
 };
 
 // 🔴 深层模式密码 —— 你可以改成自己的密码（注意不要被别人看到你的源码）
-const ADMIN_PASSCODE = 'deepseek';
+const ADMIN_PASSCODE = '071213';
 
 // 深层模式：跳过所有安全限制 + 最开放 prompt
 const ADMIN_MODE_PROMPT = `

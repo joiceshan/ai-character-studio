@@ -272,6 +272,19 @@ function loadFromStorage() {
     }
     // 把归档的老对话拼回来（只读一次）
     loadArchiveIntoState();
+
+    // 🔴 数据质量诊断（console 里能看到）
+    try {
+        const chars = State.characters || [];
+        const convs = State.conversations || {};
+        chars.forEach(c => {
+            const msgs = convs[c.id] || [];
+            const bad = msgs.filter(m => !m || (m.role === 'user' && !m.content && !m.gifUrl && !m.stickerDataUrl));
+            if (bad.length > 0) {
+                console.warn(`[数据诊断] ${c.name} 有 ${bad.length} 条异常消息:`, bad);
+            }
+        });
+    } catch {}
 }
 
 // ---------- 当前角色便捷访问 ----------
@@ -2572,7 +2585,19 @@ function renderMessages() {
     if (!container) return;
 
     const c = getActiveChar();
-    const allMsgs = getActiveMessages().filter(m => m && (m.content && String(m.content).trim() || m.gifUrl || m.stickerDataUrl));
+    // 🔴 过滤：只排除完全没有可见内容的消息（undefined/null + 空 content + 空 sticker + 空 gif）
+    const allMsgs = getActiveMessages().filter(m => {
+        if (!m) return false;
+        if (m.role === 'error') return true;  // 错误消息一定保留
+        const hasContent = m.content && String(m.content).trim();
+        const hasGif = m.gifUrl || m.stickerDataUrl;
+        if (!hasContent && !hasGif) {
+            // 诊断：看看哪些消息被过滤掉了
+            console.warn('[renderMessages] 过滤了一条无内容消息:', { role: m.role, keys: Object.keys(m) });
+            return false;
+        }
+        return true;
+    });
     const charId = c ? c.id : null;
     const WINDOW = 40;  // 🔴 止血：窗口降到 40 条，进一步减 DOM
 

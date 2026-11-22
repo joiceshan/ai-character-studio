@@ -2744,9 +2744,9 @@ input[type="range"]::-webkit-slider-thumb {
     .mini-name { font-size: 14px !important; max-width: 70px; }
     .mini-status { font-size: 10px !important; max-width: 80px; }
 
-    /* 输入区布局防溢出 */
-    .chat-input-area { overflow: hidden; }
-    .input-row-wrapper { overflow: hidden; }
+    /* 输入区布局 — 🔴 去掉 overflow:hidden（会裁掉 continue-btn） */
+    .chat-input-area { overflow: visible; }
+    .input-row-wrapper { overflow: visible; }
     .input-row {
         gap: 4px !important;
         padding: 4px !important;

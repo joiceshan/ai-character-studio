@@ -2557,13 +2557,16 @@ async function continueChat() {
         typingEl.remove();
 
         // 🔴 先 push fake user，再 push TA 回复——保证 TA 永远在最后一条
+        console.log(`🤖 continueChat fakeUserSaid: "${fakeUserSaid?.slice(0,30)}" (length=${fakeUserSaid?.length || 0}) aiReply长度=${aiReply?.length || 0}`);
         if (fakeUserSaid) {
             msgs.push({ role: 'user', content: fakeUserSaid, __uiOnly: true });
+            console.log(`🤖 push fake user 后 State=${msgs.length}`);
         }
 
         if (aiReply) {
             const finalAiReply = await processAIGifCommands(aiReply);
             msgs.push({ role: 'assistant', content: finalAiReply });
+            console.log(`🤖 push AI reply 后 State=${msgs.length}`);
         } else {
             showToast('❌ AI 没返回内容，请再点一次', 'error');
         }
@@ -2685,6 +2688,11 @@ function renderMessages() {
     });
     const charId = c ? c.id : null;
     const WINDOW = 40;  // 🔴 止血：窗口降到 40 条，进一步减 DOM
+
+    // 🔴 诊断日志：原始 vs 过滤后
+    if (rawMsgs.length !== allMsgs.length) {
+        console.warn(`🎨 renderMessages 过滤: ${rawMsgs.length} → ${allMsgs.length} 被过滤掉 ${rawMsgs.length - allMsgs.length}`);
+    }
 
     const charChanged = State.__lastCharId !== charId;
     State.__lastCharId = charId;

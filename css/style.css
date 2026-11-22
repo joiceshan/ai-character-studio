@@ -870,7 +870,8 @@ body.admin-unlocked .chat-header-bar::after {
 
 /* 输入区顶部留出一点空间给 continue-btn 浮着，避免被切 */
 .chat-main .chat-messages {
-    /* 消息区不需要额外 padding-top，continue-btn 是 absolute，不参与布局 */
+    /* 🔴 continue-btn 是 absolute top:-34px，需要给消息区底部加 padding 防遮挡 */
+    padding-bottom: 38px;
 }
 @media (max-width: 640px) {
     .continue-btn {

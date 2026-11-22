@@ -273,10 +273,13 @@ function loadFromStorage() {
         if (convs) {
             const parsed = JSON.parse(convs);
             State.conversations = parsed;
-            // 🔴 加载日志：追踪主 key 里有多少消息
+            // 🔴 加载日志：追踪主 key 里有多少消息 + roles
             Object.keys(parsed).forEach(id => {
                 const arr = parsed[id] || [];
-                if (arr.length > 0) console.log(`📥 loadFromStorage 主 key id=${id.slice(0,6)}: ${arr.length}条`);
+                if (arr.length > 0) {
+                    const roles = arr.map((m,i) => `${i}:${m?.role}`).join(' ');
+                    console.log(`📥 loadFromStorage 主 key id=${id.slice(0,6)}: ${arr.length}条 roles=[${roles}]`);
+                }
             });
         }
         if (api) State.api = { ...State.api, ...JSON.parse(api) };

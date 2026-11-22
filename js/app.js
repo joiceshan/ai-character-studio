@@ -269,7 +269,10 @@ function loadFromStorage() {
         const api = localStorage.getItem('ai_api');
 
         if (chars) State.characters = JSON.parse(chars);
-        if (active) State.activeCharacterId = active || null;
+        // 🔴 启动时不自动进入上次角色 — 让用户先选人
+        //    （保留 ai_active_character 在 localStorage 里，但不读入 State，
+        //     这样用户下次选人时 saveToStorage 会自然覆盖）
+        State.activeCharacterId = null;
         if (convs) {
             const parsed = JSON.parse(convs);
             State.conversations = parsed;

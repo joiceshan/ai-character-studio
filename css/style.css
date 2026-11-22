@@ -2686,6 +2686,83 @@ input[type="range"]::-webkit-slider-thumb {
     .mini-info { min-width: 0; overflow: hidden; }
     .mini-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 90px; }
     .mini-status { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100px; }
+
+    /* 🔴 彻底修复 header 按钮溢出 */
+    .chat-header-bar .btn-icon {
+        width: 30px !important;
+        height: 30px !important;
+        border-radius: 6px !important;
+        font-size: 14px !important;
+        flex-shrink: 0;
+    }
+    .chat-header-bar .btn-icon.sidebar-toggle,
+    .chat-header-bar #clearChatBtn {
+        width: 28px !important;
+        height: 28px !important;
+        font-size: 14px !important;
+    }
+    /* 💥 覆盖 inline style 的 !important，彻底隐藏滚动工具 */
+    .chat-scroll-tools,
+    #chatScrollTools {
+        display: none !important;
+    }
+    /* header 整体不换行不溢出 */
+    .chat-header-bar {
+        flex-wrap: nowrap !important;
+        overflow: hidden !important;
+        min-width: 0 !important;
+        gap: 4px !important;
+        padding: 8px 8px !important;
+    }
+    /* character-mini 再紧点 */
+    .character-mini {
+        gap: 6px !important;
+        flex: 1 !important;
+        min-width: 0 !important;
+    }
+    .mini-avatar {
+        width: 30px !important;
+        height: 30px !important;
+        font-size: 14px !important;
+    }
+    .mini-name { font-size: 14px !important; max-width: 70px; }
+    .mini-status { font-size: 10px !important; max-width: 80px; }
+
+    /* 输入区布局防溢出 */
+    .chat-input-area { overflow: hidden; }
+    .input-row-wrapper { overflow: hidden; }
+    .input-row {
+        gap: 4px !important;
+        padding: 4px !important;
+    }
+    .input-row .font-btn,
+    .input-row #gifBtn {
+        width: 32px !important;
+        height: 32px !important;
+        font-size: 13px !important;
+        flex-shrink: 0;
+    }
+    .input-row textarea {
+        min-width: 0 !important;
+        flex: 1 !important;
+    }
+    .btn-send {
+        flex-shrink: 0;
+        padding: 0 12px !important;
+    }
+
+    /* 偏好面板在移动端也不溢出 */
+    .pref-panel,
+    #desirePanel {
+        margin: 6px 6px 0 !important;
+        padding: 8px !important;
+        max-width: none !important;
+        width: auto !important;
+    }
+    .pref-footer {
+        flex-wrap: wrap !important;
+        gap: 6px !important;
+    }
 }
 
 /* ========== 深层模式：黑色主题 ========== */

@@ -172,13 +172,11 @@ function saveToStorage() {
             // 🔴 详细日志：每角色 State vs 落盘消息数
             if (arr.length > 0) {
                 const lost = arr.length - convsForStorage[id].length;
+                // 打印 State 里每条消息的 role（调试专用）
+                const roles = arr.map((m,i) => `${i}:${m?.role}${m?.__uiOnly?'(UIonly)':''}`).join(' ');
+                console.log(`📝 saveToStorage id=${id.slice(0,6)}: State=${arr.length} [${roles}] → 落盘=${convsForStorage[id].length}`);
                 if (lost > 0) {
-                    console.warn(`💥 saveToStorage 丢消息！id=${id.slice(0,6)} State=${arr.length} → 落盘=${convsForStorage[id].length} 丢=${lost} (含 ${uiOnlyCount} 条 uiOnly)`);
-                    arr.forEach((m, i) => {
-                        if (!m) { console.warn(`  [${i}] null/undefined → 跳过`); }
-                    });
-                } else {
-                    console.log(`📝 saveToStorage id=${id.slice(0,6)}: ${arr.length}条 (剥${uiOnlyCount}个__uiOnly，全保留)`);
+                    console.warn(`💥 有 ${lost} 条丢失！`);
                 }
             }
         });
@@ -2670,6 +2668,8 @@ function renderMessages() {
     if (!container) return;
 
     const c = getActiveChar();
+    const rawMsgs = getActiveMessages();
+    console.log(`🎨 renderMessages State=${rawMsgs.length} 条 char=${c?.name || '无'}`);
     // 🔴 过滤：只排除完全没有可见内容的消息（undefined/null + 空 content + 空 sticker + 空 gif）
     const allMsgs = getActiveMessages().filter(m => {
         if (!m) return false;

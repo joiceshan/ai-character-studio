@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#667eea">
     <title>AI Chat</title>
-    <link rel="stylesheet" href="css/style.css?v=84">
+    <link rel="stylesheet" href="css/style.css?v=85">
 </head>
 <body>
     <!-- 顶部导航 -->
@@ -67,6 +67,7 @@
                         </div>
                         <button class="rating-chip" id="ratingChip" title="切换内容分级" style="display:none;">G ▾</button>
                         <button class="btn-icon" id="prefBtn" title="我的偏好 — 影响 AI 对话内容">🎯</button>
+                        <button class="btn-icon" id="desireBtn" title="欲望模式 — 深层模式内可用" style="display:none;">💭</button>
                         <div class="chat-scroll-tools" id="chatScrollTools" style="display:flex !important;align-items:center;gap:6px;margin-left:auto;margin-right:2px;">
                             <button class="btn-icon-sm" id="fabTopInline" title="回到顶部" aria-label="回到顶部" style="display:flex !important;width:30px;height:30px;border-radius:50%;border:none;background:rgba(102,126,234,0.12);color:#667eea;font-size:14px;font-weight:700;align-items:center;justify-content:center;padding:0;line-height:1;">↑</button>
                             <button class="btn-icon-sm" id="fabBottomInline" title="滚到底部" aria-label="滚到底部" style="display:flex !important;width:30px;height:30px;border-radius:50%;border:none;background:rgba(102,126,234,0.12);color:#667eea;font-size:14px;font-weight:700;align-items:center;justify-content:center;padding:0;line-height:1;">↓</button>
@@ -94,6 +95,31 @@
                         <div class="pref-footer">
                             <span class="hint">随时可改，下一条回复就生效</span>
                             <button class="btn-save-sm" id="prefSave">保存</button>
+                        </div>
+                    </div>
+
+                    <!-- 欲望模式面板（深层模式内可用） -->
+                    <div class="pref-panel" id="desirePanel" style="display:none;">
+                        <div class="pref-header">
+                            <span>💭 欲望模式</span>
+                            <button class="btn-icon-sm" id="desireClose" title="关闭">✕</button>
+                        </div>
+
+                        <div class="pref-section">
+                            <label class="pref-label">
+                                <input type="checkbox" id="desireToggle" style="width:16px;height:16px;vertical-align:middle;margin-right:6px;">
+                                开启欲望模式
+                                <span id="desireActiveBadge" class="admin-badge" style="display:none;margin-left:4px;">已激活</span>
+                            </label>
+                            <textarea id="desireTextArea" rows="3" placeholder="写下你真实的内心欲望、需求、幻想……越坦诚越好，&#10;TA 会主动朝这个方向推进。&#10;例如：我希望 TA 今晚特别想我，主动抱住我不放"></textarea>
+                        </div>
+
+                        <div class="pref-footer">
+                            <span class="hint">仅深层模式可用 · 本地保存</span>
+                            <div style="display:flex;gap:8px;">
+                                <button class="btn-secondary btn-sm" id="desireClearBtn">清空</button>
+                                <button class="btn-save-sm" id="desireSaveBtn">保存</button>
+                            </div>
                         </div>
                     </div>
 
@@ -417,23 +443,6 @@
                     <small class="hint">跳过所有安全限制 + 最开放创作。需要密码（默认密码在源码里可以改）</small>
                 </div>
 
-                <div class="form-group" id="desireModeGroup" style="display:none;">
-                    <label>
-                        💭 欲望模式
-                        <span id="desireModeBadge" class="admin-badge" style="display:none;">已激活</span>
-                    </label>
-                    <label style="display:flex;align-items:center;gap:8px;margin-top:6px;cursor:pointer;">
-                        <input type="checkbox" id="desireModeToggle" style="width:18px;height:18px;cursor:pointer;">
-                        <span>开启欲望模式</span>
-                    </label>
-                    <textarea id="desireText" rows="4" placeholder="写下你真实的内心欲望、需求、幻想……越坦诚越好，TA 会优先朝这个方向满足你。&#10;例如：我希望今天能被温柔地抱住，然后……" style="margin-top:8px;"></textarea>
-                    <div style="display:flex;gap:8px;margin-top:8px;">
-                        <button class="btn-secondary" id="saveDesireBtn">💾 保存欲望</button>
-                        <button class="btn-secondary" id="clearDesireBtn" style="opacity:0.7;">🗑 清空</button>
-                    </div>
-                    <small class="hint">仅在深层模式解锁后可用。内容保存在你本地浏览器，TA 会主动推进到你想要的方向。</small>
-                </div>
-
                 <button class="btn-primary btn-large" id="testApiBtn">🔗 测试连接</button>
 
                 <div class="api-status" id="apiStatus" style="margin-top:12px;"></div>
@@ -510,6 +519,6 @@
     <!-- Toast 提示 -->
     <div class="toast" id="toast"></div>
 
-    <script src="js/app.js?v=84"></script>
+    <script src="js/app.js?v=85"></script>
 </body>
 </html>

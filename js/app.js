@@ -156,16 +156,16 @@ function saveToStorage() {
             localStorage.setItem('ai_characters', JSON.stringify(chars));
         }
 
-        // 写 localStorage 时过滤掉 __uiOnly（深拷贝 + 过滤，不碰原数组）
+        // 写 localStorage 时：剥掉 __uiOnly 标记（但**保留消息本身**！）
+        // 🔴 之前错误用 .filter 把 fake user 消息直接删掉了 → 刷新后用户生成的"我说的话"全丢
         const convsForStorage = {};
         Object.keys(convs).forEach(id => {
             const arr = convs[id];
             if (!arr || !Array.isArray(arr)) { convsForStorage[id] = []; return; }
             convsForStorage[id] = arr
-                .filter(m => !m || !m.__uiOnly)
+                .filter(m => !!m)  // 只排除 null/undefined
                 .map(m => {
-                    if (!m) return m;
-                    const { __uiOnly, ...rest } = m;  // 剥掉标记
+                    const { __uiOnly, ...rest } = m;  // 剥掉标记 → 消息保留
                     return rest;
                 });
         });

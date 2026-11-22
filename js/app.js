@@ -140,6 +140,22 @@ function saveToStorage() {
 
         const chars = State.characters.map(c => ({ ...c }));
 
+        // 🔴 超级保险：如果当前 State.characters 是空，但 localStorage 里原来有数据
+        //    （通过 archive key 判断），说明 State 还没加载完就被要求保存了
+        //    → 拒绝覆盖！
+        let archiveCount = 0;
+        for (let i = 0; i < localStorage.length; i++) {
+            if (localStorage.key(i)?.startsWith('ai_conversation_archive_')) archiveCount++;
+        }
+        const existingCharsRaw = localStorage.getItem('ai_characters');
+        const existingChars = existingCharsRaw ? JSON.parse(existingCharsRaw) : null;
+        if (chars.length === 0 && existingChars && existingChars.length > 0) {
+            console.warn('🛡️ saveToStorage 拒绝：当前 State.characters 是空，但 localStorage 有', existingChars.length, '个角色 → 跳过写 ai_characters');
+            // 但还是要继续写其他 key
+        } else {
+            localStorage.setItem('ai_characters', JSON.stringify(chars));
+        }
+
         // 写 localStorage 时过滤掉 __uiOnly（深拷贝 + 过滤，不碰原数组）
         const convsForStorage = {};
         Object.keys(convs).forEach(id => {
@@ -155,9 +171,14 @@ function saveToStorage() {
         });
 
         // 同步立即写入
-        localStorage.setItem('ai_characters', JSON.stringify(chars));
-        localStorage.setItem('ai_active_character', State.activeCharacterId || '');
-        localStorage.setItem('ai_conversations', JSON.stringify(convsForStorage));
+        // 🔴 ai_characters 已在上方条件保护后写入（第 143-157 行），这里不再重复
+        // （防止空 State 覆盖有数据的 localStorage）
+        if (chars.length === 0 && existingChars && existingChars.length > 0) {
+            // State 是空但 localStorage 有数据 → 也不能写 ai_conversations
+            console.warn('🛡️ saveToStorage 跳过 ai_conversations 写入（State 还没加载完）');
+        } else {
+            localStorage.setItem('ai_conversations', JSON.stringify(convsForStorage));
+        }
         localStorage.setItem('ai_api', JSON.stringify(State.api));
         localStorage.setItem('ai_conversation_prefs', JSON.stringify(State.conversationPrefs || {}));
         localStorage.setItem('ai_conversation_moods', JSON.stringify(State.conversationMoods || {}));

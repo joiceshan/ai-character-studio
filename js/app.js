@@ -273,10 +273,43 @@ function loadFromStorage() {
     // 把归档的老对话拼回来（只读一次）
     loadArchiveIntoState();
 
-    // 🔴 数据质量诊断（console 里能看到）
+// 🔴 数据质量诊断 + 自动恢复（console 里能看到）
     try {
         const chars = State.characters || [];
         const convs = State.conversations || {};
+
+        // 1. 扫描 archive key，看有没有孤儿数据（角色被删但归档消息还在）
+        const archiveKeys = [];
+        for (let i = 0; i < localStorage.length; i++) {
+            const k = localStorage.key(i);
+            if (k && k.startsWith('ai_conversation_archive_')) archiveKeys.push(k);
+        }
+        if (archiveKeys.length > 0 && chars.length === 0) {
+            console.warn(`🔴 发现 ${archiveKeys.length} 个归档 key，但角色列表是空的！尝试恢复...`);
+            archiveKeys.forEach(k => {
+                const id = k.replace('ai_conversation_archive_', '');
+                try {
+                    const arr = JSON.parse(localStorage.getItem(k) || '[]');
+                    if (arr.length > 0) {
+                        convs[id] = arr;
+                        console.warn(`  → 恢复 archive ${id}: ${arr.length} 条消息`);
+                    }
+                } catch {}
+            });
+            // 尝试从主 ai_conversations 恢复（可能有残留）
+            try {
+                const mainConvs = JSON.parse(localStorage.getItem('ai_conversations') || '{}');
+                Object.keys(mainConvs).forEach(id => {
+                    if (!convs[id] && mainConvs[id].length > 0) {
+                        convs[id] = mainConvs[id];
+                        console.warn(`  → 恢复 main conv ${id}: ${mainConvs[id].length} 条`);
+                    }
+                });
+            } catch {}
+            State.conversations = convs;
+        }
+
+        // 2. 诊断每条消息的健康状况
         chars.forEach(c => {
             const msgs = convs[c.id] || [];
             const bad = msgs.filter(m => !m || (m.role === 'user' && !m.content && !m.gifUrl && !m.stickerDataUrl));
@@ -284,7 +317,17 @@ function loadFromStorage() {
                 console.warn(`[数据诊断] ${c.name} 有 ${bad.length} 条异常消息:`, bad);
             }
         });
-    } catch {}
+
+        // 3. 角色数 vs 对话数 vs 归档 key 数的对账
+        console.log('📊 数据快照:', {
+            角色: chars.length,
+            对话: Object.keys(convs).filter(id => convs[id].length > 0).length,
+            归档key: archiveKeys.length,
+            每个角色消息数: chars.reduce((acc, c) => { acc[c.name] = (convs[c.id] || []).length; return acc; }, {})
+        });
+    } catch (diagErr) {
+        console.warn('[诊断异常]', diagErr);
+    }
 }
 
 // ---------- 当前角色便捷访问 ----------

@@ -162,12 +162,25 @@ function saveToStorage() {
         Object.keys(convs).forEach(id => {
             const arr = convs[id];
             if (!arr || !Array.isArray(arr)) { convsForStorage[id] = []; return; }
+            const uiOnlyCount = arr.filter(m => m && m.__uiOnly).length;
             convsForStorage[id] = arr
                 .filter(m => !!m)  // 只排除 null/undefined
                 .map(m => {
                     const { __uiOnly, ...rest } = m;  // 剥掉标记 → 消息保留
                     return rest;
                 });
+            // 🔴 详细日志：每角色 State vs 落盘消息数
+            if (arr.length > 0) {
+                const lost = arr.length - convsForStorage[id].length;
+                if (lost > 0) {
+                    console.warn(`💥 saveToStorage 丢消息！id=${id.slice(0,6)} State=${arr.length} → 落盘=${convsForStorage[id].length} 丢=${lost} (含 ${uiOnlyCount} 条 uiOnly)`);
+                    arr.forEach((m, i) => {
+                        if (!m) { console.warn(`  [${i}] null/undefined → 跳过`); }
+                    });
+                } else {
+                    console.log(`📝 saveToStorage id=${id.slice(0,6)}: ${arr.length}条 (剥${uiOnlyCount}个__uiOnly，全保留)`);
+                }
+            }
         });
 
         // 同步立即写入
@@ -259,7 +272,15 @@ function loadFromStorage() {
 
         if (chars) State.characters = JSON.parse(chars);
         if (active) State.activeCharacterId = active || null;
-        if (convs) State.conversations = JSON.parse(convs);
+        if (convs) {
+            const parsed = JSON.parse(convs);
+            State.conversations = parsed;
+            // 🔴 加载日志：追踪主 key 里有多少消息
+            Object.keys(parsed).forEach(id => {
+                const arr = parsed[id] || [];
+                if (arr.length > 0) console.log(`📥 loadFromStorage 主 key id=${id.slice(0,6)}: ${arr.length}条`);
+            });
+        }
         if (api) State.api = { ...State.api, ...JSON.parse(api) };
         const prefs = localStorage.getItem('ai_conversation_prefs');
         if (prefs) { try { State.conversationPrefs = JSON.parse(prefs); } catch {} }

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#667eea">
     <title>AI Chat</title>
-    <link rel="stylesheet" href="css/style.css?v=87">
+    <link rel="stylesheet" href="css/style.css?v=88">
 </head>
 <body>
     <!-- 顶部导航 -->
@@ -68,9 +68,9 @@
                         <button class="rating-chip" id="ratingChip" title="切换内容分级" style="display:none;">G ▾</button>
                         <button class="btn-icon" id="prefBtn" title="我的偏好 — 影响 AI 对话内容">🎯</button>
                         <button class="btn-icon" id="desireBtn" title="欲望模式 — 深层模式内可用" style="display:none;">💭</button>
-                        <div class="chat-scroll-tools" id="chatScrollTools" style="display:flex !important;align-items:center;gap:6px;margin-left:auto;margin-right:2px;">
-                            <button class="btn-icon-sm" id="fabTopInline" title="回到顶部" aria-label="回到顶部" style="display:flex !important;width:30px;height:30px;border-radius:50%;border:none;background:rgba(102,126,234,0.12);color:#667eea;font-size:14px;font-weight:700;align-items:center;justify-content:center;padding:0;line-height:1;">↑</button>
-                            <button class="btn-icon-sm" id="fabBottomInline" title="滚到底部" aria-label="滚到底部" style="display:flex !important;width:30px;height:30px;border-radius:50%;border:none;background:rgba(102,126,234,0.12);color:#667eea;font-size:14px;font-weight:700;align-items:center;justify-content:center;padding:0;line-height:1;">↓</button>
+                        <div class="chat-scroll-tools" id="chatScrollTools">
+                            <button class="btn-icon-sm fab-inline-btn" id="fabTopInline" title="回到顶部" aria-label="回到顶部">↑</button>
+                            <button class="btn-icon-sm fab-inline-btn" id="fabBottomInline" title="滚到底部" aria-label="滚到底部">↓</button>
                         </div>
                         <button class="btn-icon" id="clearChatBtn" title="删除对话内容">🗑️</button>
                     </div>
@@ -519,6 +519,6 @@
     <!-- Toast 提示 -->
     <div class="toast" id="toast"></div>
 
-    <script src="js/app.js?v=87"></script>
+    <script src="js/app.js?v=88"></script>
 </body>
 </html>

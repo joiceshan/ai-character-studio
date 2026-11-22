@@ -2254,6 +2254,22 @@ input[type="range"]::-webkit-slider-thumb {
     margin-left: auto;
     margin-right: 4px;
 }
+.fab-inline-btn {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(102, 126, 234, 0.12);
+    color: #667eea;
+    font-size: 14px;
+    font-weight: 700;
+    padding: 0;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
 
 .btn-icon-sm {
     width: 28px;
@@ -2763,6 +2779,46 @@ input[type="range"]::-webkit-slider-thumb {
         flex-wrap: wrap !important;
         gap: 6px !important;
     }
+
+    /* 🔴 消息气泡绝对不能超出屏幕 */
+    .chat-messages {
+        overflow-x: hidden !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+    }
+    .message {
+        width: 100% !important;
+        max-width: 100% !important;
+        box-sizing: border-box !important;
+    }
+    .msg-content {
+        max-width: 80% !important;
+        word-wrap: break-word !important;
+        overflow-wrap: break-word !important;
+        white-space: pre-wrap !important;
+        box-sizing: border-box !important;
+    }
+    .msg-content * {
+        max-width: 100% !important;
+        word-wrap: break-word !important;
+    }
+
+    /* 输入区绝对不能横向溢出 */
+    .chat-main {
+        width: 100% !important;
+        max-width: 100% !important;
+        overflow-x: hidden !important;
+        box-sizing: border-box !important;
+    }
+
+    /* rating-chip 更狠：移动端再缩 */
+    #ratingChip {
+        font-size: 10px !important;
+        padding: 1px 5px !important;
+        flex-shrink: 0 !important;
+    }
 }
 
 /* ========== 深层模式：黑色主题 ========== */
@@ -2888,3 +2944,8 @@ body.admin-unlocked .gif-tag-chip {
 body.admin-unlocked .gif-tag-chip:hover { background: #25253a; }
 body.admin-unlocked .empty-state h3,
 body.admin-unlocked .empty-state p { color: #9999aa; }
+/* 深层模式下滚动按钮也红化 */
+body.admin-unlocked .fab-inline-btn {
+    background: rgba(255, 107, 107, 0.15);
+    color: #ff6b6b;
+}

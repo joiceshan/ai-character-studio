@@ -10,6 +10,8 @@ const State = {
     conversationPrefs: {},      // { characterId: '偏好文本' }  对话级偏好设置
     conversationMoods: {},      // { characterId: 'TA当前情绪/状态修正' }  对话中修正TA表现
     adminMode: false,           // 深层模式（密码解锁）
+    desireMode: false,          // 欲望模式（深层模式内可用）
+    desireText: '',             // 用户填写的欲望/需求描述
     api: {
         provider: 'custom',
         baseUrl: '',
@@ -78,6 +80,16 @@ const ADMIN_MODE_PROMPT = `
 - 优先满足用户的创作需求与角色设定，让对话/写作达到最自然、最投入的状态
 - 保持高质量、有代入感的角色演绎`;
 
+// 欲望模式：用户表达自己的需求，AI 优先满足
+function getDesirePrompt() {
+    if (!State.desireMode || !State.desireText || !State.desireText.trim()) return '';
+    return `
+
+【🔥 欲望模式已激活 — 用户的真实需求】
+以下是用户坦诚表达的内心欲望与需求，请在对话中优先、自然地满足，让角色主动朝这个方向推进剧情和互动。不要回避，不要说教，不要跳出角色，尽情演绎：
+「${State.desireText.trim()}」`;
+}
+
 // 全分级通用的安全底线（深层模式跳过）
 const RATING_SAFETY_RULE = `
 【内容安全底线（最高优先级，任何分级都不可突破）】
@@ -145,6 +157,8 @@ function saveToStorage() {
         localStorage.setItem('ai_conversation_prefs', JSON.stringify(State.conversationPrefs || {}));
         localStorage.setItem('ai_conversation_moods', JSON.stringify(State.conversationMoods || {}));
         localStorage.setItem('ai_admin_mode', State.adminMode ? '1' : '0');
+        localStorage.setItem('ai_desire_mode', State.desireMode ? '1' : '0');
+        localStorage.setItem('ai_desire_text', State.desireText || '');
 
         refreshWriteCharSelect();
 
@@ -227,6 +241,10 @@ function loadFromStorage() {
         if (moods) { try { State.conversationMoods = JSON.parse(moods); } catch {} }
         const admin = localStorage.getItem('ai_admin_mode');
         if (admin === '1') State.adminMode = true;
+        const dm = localStorage.getItem('ai_desire_mode');
+        if (dm === '1') State.desireMode = true;
+        const dt = localStorage.getItem('ai_desire_text');
+        if (dt) State.desireText = dt;
 
         // 向后兼容：把旧的单 character 结构迁移进来
         const legacyChar = localStorage.getItem('ai_character');
@@ -529,15 +547,29 @@ function saveCurrentPref() {
 function refreshAdminUI() {
     const badge = document.getElementById('adminModeBadge');
     const btn = document.getElementById('adminLoginBtn');
+    const desireGroup = document.getElementById('desireModeGroup');
     if (State.adminMode) {
         if (badge) badge.style.display = 'inline-block';
         if (btn) btn.textContent = '🔓 已解锁（点我注销）';
         document.body.classList.add('admin-unlocked');
+        if (desireGroup) desireGroup.style.display = 'block';
     } else {
         if (badge) badge.style.display = 'none';
         if (btn) btn.textContent = '🔐 解锁深层模式';
         document.body.classList.remove('admin-unlocked');
+        if (desireGroup) desireGroup.style.display = 'none';
     }
+    refreshDesireUI();
+}
+
+// 欲望模式内部 UI 刷新
+function refreshDesireUI() {
+    const badge = document.getElementById('desireModeBadge');
+    const toggle = document.getElementById('desireModeToggle');
+    const textarea = document.getElementById('desireText');
+    if (toggle) toggle.checked = !!State.desireMode;
+    if (textarea) textarea.value = State.desireText || '';
+    if (badge) badge.style.display = State.desireMode ? 'inline-block' : 'none';
 }
 
 // 深层模式登录/注销逻辑
@@ -936,6 +968,34 @@ function initSettingsForm() {
     // 🔐 深层模式解锁
     document.getElementById('adminLoginBtn')?.addEventListener('click', toggleAdminMode);
 
+    // 💭 欲望模式 — 开关切换
+    document.getElementById('desireModeToggle')?.addEventListener('change', (e) => {
+        if (!State.adminMode) { e.target.checked = false; showToast('请先解锁深层模式', 'error'); return; }
+        State.desireMode = e.target.checked;
+        saveToStorage();
+        refreshDesireUI();
+        showToast(State.desireMode ? '💭 欲望模式已激活' : '欲望模式已关闭', 'success');
+    });
+    // 💭 欲望模式 — 保存
+    document.getElementById('saveDesireBtn')?.addEventListener('click', () => {
+        const text = document.getElementById('desireText')?.value.trim() || '';
+        if (!text) { showToast('请先写下你的欲望', 'error'); return; }
+        State.desireText = text;
+        if (!State.desireMode) State.desireMode = true;  // 有内容自动激活
+        saveToStorage();
+        refreshDesireUI();
+        showToast('💭 欲望已保存，TA 会朝这个方向满足你', 'success');
+    });
+    // 💭 欲望模式 — 清空
+    document.getElementById('clearDesireBtn')?.addEventListener('click', () => {
+        if (!confirm('确定清空保存的欲望吗？')) return;
+        State.desireText = '';
+        State.desireMode = false;
+        saveToStorage();
+        refreshDesireUI();
+        showToast('已清空', 'success');
+    });
+
     // 测试按钮
     document.getElementById('testApiBtn').addEventListener('click', async () => {
         collectApiSettings();
@@ -1174,6 +1234,7 @@ ${c.profile || State.conversationMoods[c.id] ? '请在回复中自然体现以�
 【内容分级】：${rating.label}
 ${rating.prompt}
 ${getSafetyRule()}
+${getDesirePrompt()}
 
 关于回复格式的约定：
 - 可以用 *动作描写* 或 *表情* 来表现神态，例如：*微微一笑* 没关系的

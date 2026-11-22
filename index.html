@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#667eea">
     <title>AI Chat</title>
-    <link rel="stylesheet" href="css/style.css?v=82">
+    <link rel="stylesheet" href="css/style.css?v=84">
 </head>
 <body>
     <!-- 顶部导航 -->
@@ -417,6 +417,23 @@
                     <small class="hint">跳过所有安全限制 + 最开放创作。需要密码（默认密码在源码里可以改）</small>
                 </div>
 
+                <div class="form-group" id="desireModeGroup" style="display:none;">
+                    <label>
+                        💭 欲望模式
+                        <span id="desireModeBadge" class="admin-badge" style="display:none;">已激活</span>
+                    </label>
+                    <label style="display:flex;align-items:center;gap:8px;margin-top:6px;cursor:pointer;">
+                        <input type="checkbox" id="desireModeToggle" style="width:18px;height:18px;cursor:pointer;">
+                        <span>开启欲望模式</span>
+                    </label>
+                    <textarea id="desireText" rows="4" placeholder="写下你真实的内心欲望、需求、幻想……越坦诚越好，TA 会优先朝这个方向满足你。&#10;例如：我希望今天能被温柔地抱住，然后……" style="margin-top:8px;"></textarea>
+                    <div style="display:flex;gap:8px;margin-top:8px;">
+                        <button class="btn-secondary" id="saveDesireBtn">💾 保存欲望</button>
+                        <button class="btn-secondary" id="clearDesireBtn" style="opacity:0.7;">🗑 清空</button>
+                    </div>
+                    <small class="hint">仅在深层模式解锁后可用。内容保存在你本地浏览器，TA 会主动推进到你想要的方向。</small>
+                </div>
+
                 <button class="btn-primary btn-large" id="testApiBtn">🔗 测试连接</button>
 
                 <div class="api-status" id="apiStatus" style="margin-top:12px;"></div>
@@ -493,6 +510,6 @@
     <!-- Toast 提示 -->
     <div class="toast" id="toast"></div>
 
-    <script src="js/app.js?v=82"></script>
+    <script src="js/app.js?v=84"></script>
 </body>
 </html>
